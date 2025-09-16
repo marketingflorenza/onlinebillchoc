@@ -17,7 +17,8 @@ body {
     min-height: 100vh;
     padding: 20px;
 }
-.container { max-width: 1600px; margin: 0 auto; }
+/* ✨ MODIFIED: Widen the container for larger screens */
+.container { max-width: 1800px; margin: 0 auto; }
 .glass-panel {
     background: var(--glass-bg); border-radius: 20px; padding: 24px;
     margin-bottom: 22px; border: 1px solid rgba(0, 242, 254, 0.2);
@@ -68,8 +69,6 @@ input[type="date"] {
 .stat-label { color: var(--text-secondary); font-size: 0.9em; margin-top: 6px; }
 .chart-title { font-size: 1.2em; color: var(--text-primary); margin-bottom: 16px; font-weight: 700; }
 .chart-wrapper-large { height: 500px; }
-.chart-wrapper-small { height: 320px; }
-.grid-2-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; }
 .top-categories-table { 
     overflow-x: auto; 
     max-height: 320px;
@@ -79,6 +78,11 @@ table { width: 100%; border-collapse: collapse; }
 thead { border-bottom: 2px solid var(--neon-cyan); }
 th, td { padding: 15px; text-align: left; vertical-align: middle; white-space: nowrap; }
 th { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); }
+/* ✨ ADDED: Make the first column wider */
+th:first-child, td:first-child {
+    width: 40%;
+    white-space: normal; /* Allow text to wrap if needed */
+}
 a { color: var(--neon-cyan); text-decoration: none; transition: color 0.2s ease; }
 a:hover { color: white; }
 tbody tr { border-bottom: 1px solid rgba(255,255,255,0.1); transition: background-color 0.3s ease; }
@@ -119,8 +123,27 @@ tbody tr:hover { background: rgba(0, 242, 254, 0.05); }
 .ad-card-stats { display: flex; flex-wrap: wrap; gap: 1.5rem; color: var(--text-secondary); font-size: 0.9em; }
 .ad-card-stats span { font-weight: bold; color: var(--text-primary); }
 
+/* ✨ ADDED: Responsive styles for smaller screens */
 @media (max-width: 768px) {
-    .topbar { justify-content: center; }
-    .topbar h1 { text-align: center; width: 100%; margin-bottom: 10px;}
-    .control-row { justify-content: center; }
+    body {
+        padding: 10px;
+    }
+    .topbar { 
+        justify-content: center;
+        flex-direction: column;
+    }
+    .topbar h1 { 
+        font-size: 1.5rem;
+        text-align: center;
+    }
+    .control-row { 
+        justify-content: center;
+        width: 100%;
+    }
+    .stat-number {
+        font-size: 1.8em;
+    }
+    th, td {
+        padding: 10px 8px;
+    }
 }
