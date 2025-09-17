@@ -104,8 +104,8 @@ tbody tr:hover { background: rgba(0, 242, 254, 0.05); }
 }
 .modal-overlay.show { display: flex; }
 .modal-content { width: 90%; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--neon-cyan); padding-bottom: 1rem; margin-bottom: 1rem; }
-.modal-header h2 { margin: 0; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--neon-cyan); padding-bottom: 1rem; margin-bottom: 1rem; gap: 1rem; }
+.modal-header h2 { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modal-close-btn { font-size: 2rem; font-weight: bold; color: var(--text-secondary); cursor: pointer; transition: color 0.2s ease; }
 .modal-close-btn:hover { color: var(--neon-cyan); }
 .modal-body { overflow-y: auto; padding-right: 10px; }
@@ -122,6 +122,28 @@ tbody tr:hover { background: rgba(0, 242, 254, 0.05); }
 .ad-card-details h4 { margin: 0 0 0.5rem 0; font-size: 1.1em; color: var(--text-primary); }
 .ad-card-stats { display: flex; flex-wrap: wrap; gap: 1.5rem; color: var(--text-secondary); font-size: 0.9em; }
 .ad-card-stats span { font-weight: bold; color: var(--text-primary); }
+.table-header {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
+}
+.table-header .chart-title { margin-bottom: 0; }
+.search-input {
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2);
+    color: var(--text-primary); padding: 8px 12px; border-radius: 8px;
+    color-scheme: dark; font-size: 0.9em; min-width: 250px;
+}
+.modal-header .search-input { width: 100%; }
+.sort-link { display: flex; align-items: center; gap: 0.5em; color: var(--text-primary); text-decoration: none; }
+.sort-link:hover { color: var(--neon-cyan); }
+.sort-indicator { display: inline-block; width: 1em; height: 1em; position: relative; }
+.sort-indicator::before, .sort-indicator::after {
+    content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+    border-left: 5px solid transparent; border-right: 5px solid transparent; opacity: 0.3;
+}
+.sort-indicator::before { top: 2px; border-bottom: 6px solid var(--text-secondary); }
+.sort-indicator::after { bottom: 2px; border-top: 6px solid var(--text-secondary); }
+.sort-link.asc .sort-indicator::before { border-bottom-color: var(--neon-cyan); opacity: 1; }
+.sort-link.desc .sort-indicator::after { border-top-color: var(--neon-cyan); opacity: 1; }
 
 @media (max-width: 768px) {
     body { padding: 10px; }

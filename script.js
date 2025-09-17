@@ -8,7 +8,7 @@ const CONFIG = {
 };
 
 // ================================================================
-// 2. UI ELEMENTS
+// 2. UI ELEMENTS (Cleaned up to match final HTML)
 // ================================================================
 const ui = {
     funnelStatsGrid: document.getElementById('funnelStatsGrid'),
@@ -17,6 +17,7 @@ const ui = {
     salesRevenueStatsGrid: document.getElementById('salesRevenueStatsGrid'),
     salesBillStatsGrid: document.getElementById('salesBillStatsGrid'),
     campaignsTableBody: document.getElementById('campaignsTableBody'),
+    campaignsTableHeader: document.getElementById('campaignsTableHeader'),
     errorMessage: document.getElementById('errorMessage'),
     loading: document.getElementById('loading'),
     refreshBtn: document.getElementById('refreshBtn'),
@@ -26,6 +27,8 @@ const ui = {
     modalTitle: document.getElementById('modalTitle'),
     modalBody: document.getElementById('modalBody'),
     modalCloseBtn: document.querySelector('.modal-close-btn'),
+    campaignSearchInput: document.getElementById('campaignSearchInput'),
+    adSearchInput: document.getElementById('adSearchInput'),
 };
 
 // ================================================================
@@ -33,6 +36,8 @@ const ui = {
 // ================================================================
 let charts = {};
 let latestCampaignData = [];
+let currentPopupAds = [];
+let currentSort = { key: 'spend', direction: 'desc' };
 
 // ================================================================
 // 4. HELPER FUNCTIONS
@@ -190,24 +195,55 @@ function renderSalesBillStats(summary) {
 
 function renderCampaignsTable(campaigns) {
     if (!campaigns || campaigns.length === 0) {
-        ui.campaignsTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No campaign data</td></tr>`;
+        ui.campaignsTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No campaign data found</td></tr>`;
         return;
     }
-    ui.campaignsTableBody.innerHTML = campaigns
-        .sort((a, b) => parseFloat(b.insights?.spend || 0) - parseFloat(a.insights?.spend || 0))
-        .map(c => {
+    ui.campaignsTableBody.innerHTML = campaigns.map(c => {
             const insights = c.insights || {};
             return `
                 <tr>
                     <td><a href="#" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
                     <td><span style="color:${c.status === 'ACTIVE' ? '#34d399' : '#a0a0b0'}">${c.status || 'N/A'}</span></td>
-                    <td class="revenue-cell">${formatCurrency(c.insights?.spend)}</td>
-                    <td>${formatNumber(c.insights?.impressions)}</td>
-                    <td>${formatNumber(c.insights?.purchases)}</td>
-                    <td>${formatNumber(c.insights?.messaging_conversations)}</td>
+                    <td class="revenue-cell">${formatCurrency(insights.spend)}</td>
+                    <td>${formatNumber(insights.impressions)}</td>
+                    <td>${formatNumber(insights.purchases)}</td>
+                    <td>${formatNumber(insights.messaging_conversations)}</td>
+                    <td>${formatCurrency(insights.cpm)}</td>
                 </tr>
             `;
         }).join('');
+}
+
+function sortAndRenderCampaigns() {
+    const { key, direction } = currentSort;
+    const searchTerm = ui.campaignSearchInput.value.toLowerCase();
+    
+    let filteredData = latestCampaignData.filter(campaign => 
+        campaign.name.toLowerCase().includes(searchTerm)
+    );
+
+    filteredData.sort((a, b) => {
+        let valA, valB;
+        if (key === 'name' || key === 'status') {
+            valA = a[key]?.toLowerCase() || '';
+            valB = b[key]?.toLowerCase() || '';
+        } else {
+            valA = parseFloat(a.insights?.[key] || 0);
+            valB = parseFloat(b.insights?.[key] || 0);
+        }
+        if (valA < valB) return direction === 'asc' ? -1 : 1;
+        if (valA > valB) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    document.querySelectorAll('.sort-link').forEach(link => {
+        link.classList.remove('asc', 'desc');
+        if (link.dataset.sort === key) {
+            link.classList.add(direction);
+        }
+    });
+
+    renderCampaignsTable(filteredData);
 }
 
 function renderDailySpendChart(dailySpendData) {
@@ -225,10 +261,17 @@ function showAdDetails(campaignId) {
     const campaign = latestCampaignData.find(c => c.id === campaignId);
     if (!campaign) return;
     ui.modalTitle.textContent = `Ads in: ${campaign.name}`;
-    if (!campaign.ads || campaign.ads.length === 0) {
+    ui.adSearchInput.value = '';
+    currentPopupAds = campaign.ads || [];
+    renderPopupAds(currentPopupAds);
+    ui.modal.classList.add('show');
+}
+
+function renderPopupAds(ads) {
+     if (!ads || ads.length === 0) {
         ui.modalBody.innerHTML = `<p style="text-align: center;">No ads found for this campaign.</p>`;
     } else {
-        ui.modalBody.innerHTML = campaign.ads
+        ui.modalBody.innerHTML = ads
             .sort((a,b) => b.insights.purchases - a.insights.purchases)
             .map(ad => `
             <div class="ad-card">
@@ -242,12 +285,12 @@ function showAdDetails(campaignId) {
                         <div>Impressions: <span>${formatNumber(ad.insights.impressions)}</span></div>
                         <div>Purchases: <span>${formatNumber(ad.insights.purchases)}</span></div>
                         <div>Messaging Started: <span>${formatNumber(ad.insights.messaging_conversations)}</span></div>
+                        <div>CPM: <span>${formatCurrency(ad.insights.cpm)}</span></div>
                     </div>
                 </div>
             </div>
         `).join('');
     }
-    ui.modal.classList.add('show');
 }
 
 function initializeModal() {
@@ -302,7 +345,7 @@ async function main() {
             renderSalesOverview(salesData.summary);
             renderSalesRevenueBreakdown(salesData.summary);
             renderSalesBillStats(salesData.summary);
-            renderCampaignsTable(adsResponse.data.campaigns);
+            sortAndRenderCampaigns();
             renderDailySpendChart(adsResponse.data.dailySpend);
         } else {
             throw new Error(adsResponse.error || 'Unknown API error');
@@ -324,12 +367,6 @@ function setDefaultDates() {
     const toInputFormat = (date) => date.toISOString().split('T')[0];
     ui.endDate.value = toInputFormat(today);
     ui.startDate.value = toInputFormat(thirtyDaysAgo);
-    
-    const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-    const firstDayLastMonth = new Date(lastDayLastMonth.getFullYear(), lastDayLastMonth.getMonth(), 1);
-    // These elements might not exist in the final HTML, handle gracefully
-    if (ui.compareEndDate) ui.compareEndDate.value = toInputFormat(lastDayLastMonth);
-    if (ui.compareStartDate) ui.compareStartDate.value = toInputFormat(firstDayLastMonth);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -341,12 +378,23 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.refreshBtn.addEventListener('click', main);
     ui.startDate.addEventListener('change', main);
     ui.endDate.addEventListener('change', main);
-    // These elements might not exist, handle gracefully
-    if (ui.compareToggle) {
-        const inputs = [ui.compareStartDate, ui.compareEndDate, ui.compareToggle];
-        inputs.forEach(input => input.addEventListener('change', main));
-        ui.compareToggle.addEventListener('change', () => {
-            ui.compareControls.classList.toggle('show', ui.compareToggle.checked);
-        });
-    }
+    ui.campaignSearchInput.addEventListener('input', sortAndRenderCampaigns);
+    ui.adSearchInput.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filteredAds = currentPopupAds.filter(ad => ad.name.toLowerCase().includes(searchTerm));
+        renderPopupAds(filteredAds);
+    });
+    ui.campaignsTableHeader.addEventListener('click', (e) => {
+        e.preventDefault();
+        const link = e.target.closest('.sort-link');
+        if (!link) return;
+        const sortKey = link.dataset.sort;
+        if (currentSort.key === sortKey) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort.key = sortKey;
+            currentSort.direction = 'desc';
+        }
+        sortAndRenderCampaigns();
+    });
 });
