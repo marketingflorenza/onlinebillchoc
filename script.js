@@ -29,6 +29,8 @@ const ui = {
     modalCloseBtn: document.querySelector('.modal-close-btn'),
     campaignSearchInput: document.getElementById('campaignSearchInput'),
     adSearchInput: document.getElementById('adSearchInput'),
+    categoryRevenueChart: document.getElementById('categoryRevenueChart'),
+    categoryDetailTableBody: document.getElementById('categoryDetailTableBody'),
 };
 
 // ================================================================
@@ -36,6 +38,7 @@ const ui = {
 // ================================================================
 let charts = {};
 let latestCampaignData = [];
+let latestCategoryDetails = [];
 let currentPopupAds = [];
 let currentSort = { key: 'spend', direction: 'desc' };
 
@@ -61,6 +64,15 @@ function parseGvizDate(gvizDate) {
     const d = new Date(gvizDate);
     return isNaN(d) ? null : d;
 }
+
+function parseCategories(categoryStr) {
+    if (!categoryStr || typeof categoryStr !== 'string') return [];
+    return categoryStr.split(',').map(c => c.trim()).filter(Boolean);
+}
+
+// START: Helper to check if a customer is new
+const isNewCustomer = (row) => String(row['ลูกค้าใหม่'] || '').trim().toLowerCase() === 'true' || String(row['ลูกค้าใหม่'] || '').trim() === '✔' || String(row['ลูกค้าใหม่'] || '').trim() === '1';
+// END: Helper
 
 // ================================================================
 // 5. DATA FETCHING
@@ -91,6 +103,54 @@ async function fetchSalesData() {
 // ================================================================
 // 6. DATA PROCESSING
 // ================================================================
+
+function calculateCategoryDetails(filteredRows) {
+    const categoryMap = {};
+
+    filteredRows.forEach(row => {
+        const p1 = toNumber(row['P1']);
+        const upP1 = toNumber(row['ยอดอัพ P1']);
+        const upP2 = toNumber(row['ยอดอัพ P2']);
+        const rowRevenue = p1 + upP1 + upP2;
+
+        if (rowRevenue > 0) {
+            const categories = parseCategories(row['หมวดหมู่']);
+            if (categories.length > 0) {
+                const p1Portion = p1 / categories.length;
+                const upP1Portion = upP1 / categories.length;
+                const upP2Portion = upP2 / categories.length;
+
+                categories.forEach(catName => {
+                    if (!categoryMap[catName]) {
+                        categoryMap[catName] = {
+                            name: catName,
+                            p1Revenue: 0, upP1Revenue: 0, upP2Revenue: 0,
+                            p1Bills: 0, upP1Bills: 0, upP2Bills: 0,
+                            newCustomers: 0, totalRevenue: 0,
+                            transactions: []
+                        };
+                    }
+                    const category = categoryMap[catName];
+                    category.p1Revenue += p1Portion;
+                    category.upP1Revenue += upP1Portion;
+                    category.upP2Revenue += upP2Portion;
+                    category.totalRevenue += (p1Portion + upP1Portion + upP2Portion);
+
+                    if (p1 > 0) category.p1Bills++;
+                    if (upP1 > 0) category.upP1Bills++;
+                    if (upP2 > 0) category.upP2Bills++;
+                    if (isNewCustomer(row)) {
+                        category.newCustomers++;
+                    }
+                    category.transactions.push(row);
+                });
+            }
+        }
+    });
+
+    return Object.values(categoryMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
+}
+
 function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
     const filteredRows = allSalesRows.filter(row => {
         const d = parseGvizDate(row['วันที่']);
@@ -115,16 +175,17 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
         summary.upP1Revenue += upP1;
         summary.upP2Revenue += upP2;
         summary.totalRevenue += rowRevenue;
-
-        const isNew = String(row['ลูกค้าใหม่'] || '').trim().toLowerCase() === 'true' || String(row['ลูกค้าใหม่'] || '').trim() === '✔' || String(row['ลูกค้าใหม่'] || '').trim() === '1';
-        if (isNew) {
+        
+        if (isNewCustomer(row)) {
             summary.newCustomers++;
         } else if (rowRevenue > 0) {
             summary.oldCustomers++;
         }
     });
     summary.totalCustomers = summary.newCustomers + summary.oldCustomers;
-    return { summary };
+    
+    const categoryDetails = calculateCategoryDetails(filteredRows);
+    return { summary, categoryDetails };
 }
 
 // ================================================================
@@ -213,6 +274,109 @@ function renderCampaignsTable(campaigns) {
             `;
         }).join('');
 }
+
+function renderCategoryChart(categoryData) {
+    const chart = charts.categoryRevenue;
+    const topData = categoryData.slice(0, 15);
+
+    chart.data.labels = topData.map(d => d.name);
+    chart.data.datasets[0].data = topData.map(d => d.totalRevenue);
+    chart.update();
+}
+
+// START: Updated function to render table with clickable cells
+function renderCategoryDetailTable(categoryDetails) {
+    const rankClasses = ['gold', 'silver', 'bronze'];
+    ui.categoryDetailTableBody.innerHTML = categoryDetails.map((cat, index) => `
+        <tr>
+            <td class="rank-column"><span class="rank-badge ${index < 3 ? rankClasses[index] : ''}">${index + 1}</span></td>
+            <td><strong>${cat.name}</strong></td>
+            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'P1')">${formatNumber(cat.p1Bills)}</span></td>
+            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P1')">${formatNumber(cat.upP1Bills)}</span></td>
+            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P2')">${formatNumber(cat.upP2Bills)}</span></td>
+            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'NEW_CUSTOMER')">${formatNumber(cat.newCustomers)}</span></td>
+            <td class="revenue-cell">${formatCurrency(cat.totalRevenue)}</td>
+        </tr>
+    `).join('');
+}
+// END: Updated function
+
+// START: Updated popup function to filter transactions
+function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
+    const categoryData = latestCategoryDetails.find(cat => cat.name === categoryName);
+    if (!categoryData) return;
+
+    let filteredTransactions = categoryData.transactions;
+    let title = `All Transactions for: ${categoryName}`;
+
+    switch (filterType) {
+        case 'P1':
+            title = `P1 Bills for: ${categoryName}`;
+            filteredTransactions = categoryData.transactions.filter(row => toNumber(row['P1']) > 0);
+            break;
+        case 'UP_P1':
+            title = `UP P1 Bills for: ${categoryName}`;
+            filteredTransactions = categoryData.transactions.filter(row => toNumber(row['ยอดอัพ P1']) > 0);
+            break;
+        case 'UP_P2':
+            title = `UP P2 Bills for: ${categoryName}`;
+            filteredTransactions = categoryData.transactions.filter(row => toNumber(row['ยอดอัพ P2']) > 0);
+            break;
+        case 'NEW_CUSTOMER':
+            title = `New Customers for: ${categoryName}`;
+            filteredTransactions = categoryData.transactions.filter(row => isNewCustomer(row));
+            break;
+    }
+
+    ui.modalTitle.textContent = title;
+    
+    if (filteredTransactions.length === 0) {
+        ui.modalBody.innerHTML = '<p style="text-align:center;">No matching transactions found.</p>';
+    } else {
+        const tableRows = filteredTransactions
+            .sort((a,b) => parseGvizDate(b['วันที่']) - parseGvizDate(a['วันที่']))
+            .map((row, index) => {
+                const p1 = toNumber(row['P1']);
+                const upP1 = toNumber(row['ยอดอัพ P1']);
+                const upP2 = toNumber(row['ยอดอัพ P2']);
+                
+                let billTypes = [];
+                if (p1 > 0) billTypes.push('P1');
+                if (upP1 > 0) billTypes.push('UP P1');
+                if (upP2 > 0) billTypes.push('UP P2');
+
+                return `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${new Date(parseGvizDate(row['วันที่'])).toLocaleDateString('th-TH')}</td>
+                    <td>${row['ชื่อลูกค้า'] || 'N/A'}</td>
+                    <td>${row['หมวดหมู่'] || 'N/A'}</td>
+                    <td>${billTypes.join(', ') || 'N/A'}</td>
+                    <td class="revenue-cell">${formatCurrency(p1+upP1+upP2)}</td>
+                </tr>
+                `;
+        }).join('');
+        ui.modalBody.innerHTML = `
+            <div class="ad-card-details" style="padding:0;">
+                <table class="popup-table">
+                    <thead>
+                        <tr>
+                            <th>ลำดับ</th>
+                            <th>Date</th>
+                            <th>Customer Name</th>
+                            <th>รายการ</th>
+                            <th>ประเภทบิล</th>
+                            <th>Total Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+        `;
+    }
+    ui.modal.classList.add('show');
+}
+// END: Updated popup function
 
 function sortAndRenderCampaigns() {
     const { key, direction } = currentSort;
@@ -304,6 +468,7 @@ function initializeModal() {
 function initializeCharts() {
     const textColor = '#e0e0e0';
     const gridColor = 'rgba(224, 224, 224, 0.1)';
+    const categoryColors = ['#3B82F6', '#EC4899', '#84CC16', '#F59E0B', '#10B981', '#6366F1', '#D946EF', '#F97316', '#06B6D4', '#EAB308'].map(c => c + 'CC');
     
     charts.dailySpend = new Chart(document.getElementById('dailySpendChart').getContext('2d'), {
         type: 'line', data: { labels: [], datasets: [{ label: 'Spend (THB)', data: [], borderColor: '#00f2fe', backgroundColor: 'rgba(0, 242, 254, 0.1)', fill: true, tension: 0.3 }] },
@@ -318,6 +483,36 @@ function initializeCharts() {
     charts.customer = new Chart(document.getElementById('customerChart').getContext('2d'), {
         type: 'doughnut', data: { labels:['New Customers','Old Customers'], datasets:[{ data:[], backgroundColor: ['#F59E0B', '#10B981'], borderColor: '#0d0c1d' }] },
         options: { responsive:true, maintainAspectRatio:false, plugins: { legend: { position: 'right', labels: { color: textColor } } } }
+    });
+
+    charts.categoryRevenue = new Chart(ui.categoryRevenueChart.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Revenue (THB)',
+                data: [],
+                backgroundColor: categoryColors
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    ticks: { color: textColor, autoSkip: false, maxRotation: 45, minRotation: 45 },
+                    grid: { color: 'transparent' }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: textColor, callback: v => '฿' + (v / 1000) + 'K' },
+                    grid: { color: gridColor }
+                }
+            }
+        }
     });
 }
 
@@ -340,6 +535,8 @@ async function main() {
             latestCampaignData = adsResponse.data.campaigns;
             const salesData = processSalesDataForPeriod(allSalesRows, new Date(startDate + 'T00:00:00'), new Date(endDate + 'T23:59:59'));
             
+            latestCategoryDetails = salesData.categoryDetails;
+            
             renderFunnelOverview(adsResponse.totals, salesData.summary);
             renderAdsOverview(adsResponse.totals);
             renderSalesOverview(salesData.summary);
@@ -347,6 +544,9 @@ async function main() {
             renderSalesBillStats(salesData.summary);
             sortAndRenderCampaigns();
             renderDailySpendChart(adsResponse.data.dailySpend);
+            renderCategoryChart(salesData.categoryDetails);
+            renderCategoryDetailTable(salesData.categoryDetails);
+
         } else {
             throw new Error(adsResponse.error || 'Unknown API error');
         }

@@ -72,14 +72,17 @@ input[type="date"] {
 .grid-2-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; }
 .top-categories-table { 
     overflow-x: auto; 
-    max-height: 320px;
+    /* --- ADJUSTED --- */
+    max-height: 550px;
     overflow-y: auto;
 }
 table { width: 100%; border-collapse: collapse; }
 thead { border-bottom: 2px solid var(--neon-cyan); }
 th, td { padding: 15px; text-align: left; vertical-align: middle; white-space: nowrap; }
 th { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); }
-th:first-child, td:first-child {
+
+/* --- ADJUSTED: Applies only to Category column --- */
+th:nth-child(2), td:nth-child(2) {
     width: 40%;
     white-space: normal;
 }
@@ -153,7 +156,36 @@ tbody tr:hover { background: rgba(0, 242, 254, 0.05); }
     .stat-number { font-size: 1.8em; }
     .section-header h2 { font-size: 1.4em; }
     th, td { padding: 12px 8px; white-space: normal; }
-    th:first-child, td:first-child { width: auto; }
+    
+    /* --- ADJUSTED: Remove width constraint on mobile for better flow --- */
+    th:nth-child(2), td:nth-child(2) { 
+      width: auto; 
+    }
+
     .ad-card { flex-direction: column; align-items: center; text-align: center; }
     .ad-card-stats { justify-content: center; }
+}
+
+/* --- Added/Updated Styles --- */
+
+.rank-column {
+    /* --- ADJUSTED --- */
+    width: 80px; 
+    text-align: center;
+}
+
+td.rank-column {
+    font-weight: 600;
+}
+
+/* เพิ่ม CSS เพื่อให้ตัวเลขที่คลิกได้มีหน้าตาเหมือนลิงก์ */
+.clickable-cell {
+    cursor: pointer;
+    text-decoration: underline;
+    color: #82a8f8; /* สีฟ้าอ่อน */
+    transition: color 0.2s ease;
+    font-weight: 600;
+}
+.clickable-cell:hover {
+    color: #00f2fe; /* สีฟ้า Neon */
 }

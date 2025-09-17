@@ -75,6 +75,38 @@
                 <div class="chart-wrapper-small"><canvas id="customerChart"></canvas></div>
             </div>
         </div>
+
+        <div class="section-header" style="margin-top: 40px;">
+            <h2>📊 Revenue by Category</h2>
+        </div>
+        <div class="glass-panel">
+            <div class="chart-wrapper-large">
+                <canvas id="categoryRevenueChart"></canvas>
+            </div>
+        </div>
+
+        <div class="glass-panel top-categories-table" style="margin-top: 22px;">
+            <h2 class="chart-title">📋 Detailed Category Performance</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 20px;">
+                คลิกที่แถวเพื่อดูรายละเอียดธุรกรรมของแต่ละหมวดหมู่
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th class="rank-column">Rank</th>
+                        <th>Category</th>
+                        <th>P1 Bills</th>
+                        <th>UP P1 Bills</th>
+                        <th>UP P2 Bills</th>
+                        <th>New Customers</th>
+                        <th>Total Revenue</th>
+                    </tr>
+                </thead>
+                <tbody id="categoryDetailTableBody">
+                </tbody>
+                </table>
+        </div>
+
     </div>
 
     <div id="adDetailsModal" class="modal-overlay">
