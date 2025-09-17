@@ -48,6 +48,7 @@ let currentSort = { key: 'spend', direction: 'desc' };
 function showError(message) { ui.errorMessage.innerHTML = message; ui.errorMessage.classList.add('show'); }
 function hideError() { ui.errorMessage.classList.remove('show'); }
 const formatCurrency = (num) => `฿${parseFloat(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatCurrencyShort = (num) => `฿${parseInt(num || 0).toLocaleString('en-US')}`;
 const formatNumber = (num) => parseInt(num || 0).toLocaleString('en-US');
 const toNumber = (val) => {
     if (val === null || val === undefined || val === '') return 0;
@@ -70,9 +71,7 @@ function parseCategories(categoryStr) {
     return categoryStr.split(',').map(c => c.trim()).filter(Boolean);
 }
 
-// START: Helper to check if a customer is new
 const isNewCustomer = (row) => String(row['ลูกค้าใหม่'] || '').trim().toLowerCase() === 'true' || String(row['ลูกค้าใหม่'] || '').trim() === '✔' || String(row['ลูกค้าใหม่'] || '').trim() === '1';
-// END: Helper
 
 // ================================================================
 // 5. DATA FETCHING
@@ -103,7 +102,6 @@ async function fetchSalesData() {
 // ================================================================
 // 6. DATA PROCESSING
 // ================================================================
-
 function calculateCategoryDetails(filteredRows) {
     const categoryMap = {};
 
@@ -284,24 +282,30 @@ function renderCategoryChart(categoryData) {
     chart.update();
 }
 
-// START: Updated function to render table with clickable cells
 function renderCategoryDetailTable(categoryDetails) {
     const rankClasses = ['gold', 'silver', 'bronze'];
     ui.categoryDetailTableBody.innerHTML = categoryDetails.map((cat, index) => `
         <tr>
-            <td class="rank-column"><span class="rank-badge ${index < 3 ? rankClasses[index] : ''}">${index + 1}</span></td>
-            <td><strong>${cat.name}</strong></td>
-            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'P1')">${formatNumber(cat.p1Bills)}</span></td>
-            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P1')">${formatNumber(cat.upP1Bills)}</span></td>
-            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P2')">${formatNumber(cat.upP2Bills)}</span></td>
-            <td><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'NEW_CUSTOMER')">${formatNumber(cat.newCustomers)}</span></td>
-            <td class="revenue-cell">${formatCurrency(cat.totalRevenue)}</td>
+            <td data-label="Rank" class="rank-column"><span class="rank-badge ${index < 3 ? rankClasses[index] : ''}">${index + 1}</span></td>
+            <td data-label="Category"><strong>${cat.name}</strong></td>
+            <td data-label="P1 Bills">
+                <span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'P1')">${formatNumber(cat.p1Bills)}</span>
+                <small class="sub-revenue">${formatCurrencyShort(cat.p1Revenue)}</small>
+            </td>
+            <td data-label="UP P1 Bills">
+                <span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P1')">${formatNumber(cat.upP1Bills)}</span>
+                <small class="sub-revenue">${formatCurrencyShort(cat.upP1Revenue)}</small>
+            </td>
+            <td data-label="UP P2 Bills">
+                <span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P2')">${formatNumber(cat.upP2Bills)}</span>
+                <small class="sub-revenue">${formatCurrencyShort(cat.upP2Revenue)}</small>
+            </td>
+            <td data-label="New Customers"><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'NEW_CUSTOMER')">${formatNumber(cat.newCustomers)}</span></td>
+            <td data-label="Total Revenue" class="revenue-cell">${formatCurrency(cat.totalRevenue)}</td>
         </tr>
     `).join('');
 }
-// END: Updated function
 
-// START: Updated popup function to filter transactions
 function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
     const categoryData = latestCategoryDetails.find(cat => cat.name === categoryName);
     if (!categoryData) return;
@@ -376,7 +380,6 @@ function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
     }
     ui.modal.classList.add('show');
 }
-// END: Updated popup function
 
 function sortAndRenderCampaigns() {
     const { key, direction } = currentSort;
