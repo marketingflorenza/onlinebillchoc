@@ -145,7 +145,7 @@ function renderAdsOverview(totals) {
     const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number"><span>${value}</span></div><div class="stat-label">${label}</div></div>`;
     ui.adsStatsGrid.innerHTML = [
         createStatCard('Impressions', formatNumber(totals.impressions)),
-        createStatCard('Link Clicks', formatNumber(totals.inline_link_clicks)),
+        createStatCard('Messaging Started', formatNumber(totals.messaging_conversations)),
         createStatCard('Avg. CPM', formatCurrency(totals.cpm)),
         createStatCard('Avg. CTR', `${parseFloat(totals.ctr || 0).toFixed(2)}%`)
     ].join('');
@@ -190,20 +190,24 @@ function renderSalesBillStats(summary) {
 
 function renderCampaignsTable(campaigns) {
     if (!campaigns || campaigns.length === 0) {
-        ui.campaignsTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No campaign data</td></tr>`;
+        ui.campaignsTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No campaign data</td></tr>`;
         return;
     }
     ui.campaignsTableBody.innerHTML = campaigns
         .sort((a, b) => parseFloat(b.insights?.spend || 0) - parseFloat(a.insights?.spend || 0))
-        .map(c => `
-            <tr>
-                <td><a href="#" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
-                <td><span style="color:${c.status === 'ACTIVE' ? '#34d399' : '#a0a0b0'}">${c.status || 'N/A'}</span></td>
-                <td class="revenue-cell">${formatCurrency(c.insights?.spend)}</td>
-                <td>${formatNumber(c.insights?.impressions)}</td>
-                <td>${formatNumber(c.insights?.purchases)}</td>
-            </tr>
-        `).join('');
+        .map(c => {
+            const insights = c.insights || {};
+            return `
+                <tr>
+                    <td><a href="#" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
+                    <td><span style="color:${c.status === 'ACTIVE' ? '#34d399' : '#a0a0b0'}">${c.status || 'N/A'}</span></td>
+                    <td class="revenue-cell">${formatCurrency(c.insights?.spend)}</td>
+                    <td>${formatNumber(c.insights?.impressions)}</td>
+                    <td>${formatNumber(c.insights?.purchases)}</td>
+                    <td>${formatNumber(c.insights?.messaging_conversations)}</td>
+                </tr>
+            `;
+        }).join('');
 }
 
 function renderDailySpendChart(dailySpendData) {
@@ -225,7 +229,6 @@ function showAdDetails(campaignId) {
         ui.modalBody.innerHTML = `<p style="text-align: center;">No ads found for this campaign.</p>`;
     } else {
         ui.modalBody.innerHTML = campaign.ads
-            // ✅ MODIFIED: Changed to sort by Purchases
             .sort((a,b) => b.insights.purchases - a.insights.purchases)
             .map(ad => `
             <div class="ad-card">
@@ -238,7 +241,7 @@ function showAdDetails(campaignId) {
                         <div>Spend: <span>${formatCurrency(ad.insights.spend)}</span></div>
                         <div>Impressions: <span>${formatNumber(ad.insights.impressions)}</span></div>
                         <div>Purchases: <span>${formatNumber(ad.insights.purchases)}</span></div>
-                        <div>CPM: <span>${formatCurrency(ad.insights.cpm)}</span></div>
+                        <div>Messaging Started: <span>${formatNumber(ad.insights.messaging_conversations)}</span></div>
                     </div>
                 </div>
             </div>
@@ -321,6 +324,12 @@ function setDefaultDates() {
     const toInputFormat = (date) => date.toISOString().split('T')[0];
     ui.endDate.value = toInputFormat(today);
     ui.startDate.value = toInputFormat(thirtyDaysAgo);
+    
+    const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    const firstDayLastMonth = new Date(lastDayLastMonth.getFullYear(), lastDayLastMonth.getMonth(), 1);
+    // These elements might not exist in the final HTML, handle gracefully
+    if (ui.compareEndDate) ui.compareEndDate.value = toInputFormat(lastDayLastMonth);
+    if (ui.compareStartDate) ui.compareStartDate.value = toInputFormat(firstDayLastMonth);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -332,4 +341,12 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.refreshBtn.addEventListener('click', main);
     ui.startDate.addEventListener('change', main);
     ui.endDate.addEventListener('change', main);
+    // These elements might not exist, handle gracefully
+    if (ui.compareToggle) {
+        const inputs = [ui.compareStartDate, ui.compareEndDate, ui.compareToggle];
+        inputs.forEach(input => input.addEventListener('change', main));
+        ui.compareToggle.addEventListener('change', () => {
+            ui.compareControls.classList.toggle('show', ui.compareToggle.checked);
+        });
+    }
 });
