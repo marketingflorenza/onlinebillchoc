@@ -8,7 +8,7 @@ const CONFIG = {
 };
 
 // ================================================================
-// 2. UI ELEMENTS (Cleaned up to match final HTML)
+// 2. UI ELEMENTS
 // ================================================================
 const ui = {
     funnelStatsGrid: document.getElementById('funnelStatsGrid'),
@@ -23,6 +23,10 @@ const ui = {
     refreshBtn: document.getElementById('refreshBtn'),
     startDate: document.getElementById('startDate'),
     endDate: document.getElementById('endDate'),
+    compareToggle: document.getElementById('compareToggle'),
+    compareControls: document.getElementById('compareControls'),
+    compareStartDate: document.getElementById('compareStartDate'),
+    compareEndDate: document.getElementById('compareEndDate'),
     modal: document.getElementById('adDetailsModal'),
     modalTitle: document.getElementById('modalTitle'),
     modalBody: document.getElementById('modalBody'),
@@ -31,6 +35,8 @@ const ui = {
     adSearchInput: document.getElementById('adSearchInput'),
     categoryRevenueChart: document.getElementById('categoryRevenueChart'),
     categoryDetailTableBody: document.getElementById('categoryDetailTableBody'),
+    channelTableBody: document.getElementById('channelTableBody'),
+    upsellPathsTableBody: document.getElementById('upsellPathsTableBody'),
 };
 
 // ================================================================
@@ -39,8 +45,11 @@ const ui = {
 let charts = {};
 let latestCampaignData = [];
 let latestCategoryDetails = [];
+let latestUpsellPaths = [];
 let currentPopupAds = [];
 let currentSort = { key: 'spend', direction: 'desc' };
+let allSalesDataCache = []; // Cache for sales data
+let latestComparisonData = null;
 
 // ================================================================
 // 4. HELPER FUNCTIONS
@@ -65,13 +74,22 @@ function parseGvizDate(gvizDate) {
     const d = new Date(gvizDate);
     return isNaN(d) ? null : d;
 }
-
 function parseCategories(categoryStr) {
     if (!categoryStr || typeof categoryStr !== 'string') return [];
     return categoryStr.split(',').map(c => c.trim()).filter(Boolean);
 }
-
 const isNewCustomer = (row) => String(row['ลูกค้าใหม่'] || '').trim().toLowerCase() === 'true' || String(row['ลูกค้าใหม่'] || '').trim() === '✔' || String(row['ลูกค้าใหม่'] || '').trim() === '1';
+function calculateGrowth(current, previous) {
+    if (previous === 0) {
+        return current > 0 ? { percent: '∞', class: 'positive' } : { percent: '0.0%', class: '' };
+    }
+    const percentage = ((current - previous) / previous) * 100;
+    return {
+        percent: `${percentage > 0 ? '+' : ''}${percentage.toFixed(1)}%`,
+        class: percentage > 0 ? 'positive' : (percentage < 0 ? 'negative' : '')
+    };
+}
+
 
 // ================================================================
 // 5. DATA FETCHING
@@ -81,30 +99,89 @@ async function fetchAdsData(startDate, endDate) {
     const until = endDate.split('-').reverse().join('-');
     const apiUrl = `${CONFIG.API_BASE_URL}/databillchoc?since=${since}&until=${until}`;
     const response = await fetch(apiUrl);
-    if (!response.ok) throw new Error('Ads API error');
+    if (!response.ok) throw new Error('Ads API error: ' + response.statusText);
     return response.json();
 }
 
 async function fetchSalesData() {
+    if (allSalesDataCache.length > 0) return allSalesDataCache;
     const sheetUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${CONFIG.SHEET_NAME_SUMMARY}`;
     const response = await fetch(sheetUrl);
+    if (!response.ok) throw new Error('Google Sheet API error: ' + response.statusText);
     const text = await response.text();
     const jsonStr = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
     const gvizData = JSON.parse(jsonStr);
     const cols = gvizData.table.cols.map(c => c.label || c.id || '');
-    return gvizData.table.rows.map(r => {
+    const salesData = gvizData.table.rows.map(r => {
         const obj = {};
         cols.forEach((col, i) => obj[col] = r.c && r.c[i] ? r.c[i].v : null);
         return obj;
     });
+    allSalesDataCache = salesData;
+    return salesData;
 }
 
 // ================================================================
 // 6. DATA PROCESSING
 // ================================================================
+function linkP1AndUpP1(rows) {
+    const p1Lookup = new Map();
+    rows.forEach(row => {
+        const phone = row['เบอร์ติดต่อ'];
+        const p1Value = toNumber(row['P1']);
+        const date = parseGvizDate(row['วันที่']);
+        if (phone && p1Value > 0 && date) {
+            const existing = p1Lookup.get(phone);
+            if (!existing || date < existing.p1Date) {
+                p1Lookup.set(phone, { p1Date: date, p1Categories: row['หมวดหมู่'] });
+            }
+        }
+    });
+
+    return rows.map(row => {
+        const phone = row['เบอร์ติดต่อ'];
+        const upP1Value = toNumber(row['ยอดอัพ P1']);
+        const date = parseGvizDate(row['วันที่']);
+        if (phone && upP1Value > 0 && date) {
+            const p1Origin = p1Lookup.get(phone);
+            if (p1Origin && date >= p1Origin.p1Date) {
+                return { ...row, linkedP1Categories: p1Origin.p1Categories };
+            }
+        }
+        return row;
+    });
+}
+
+function calculateUpsellPaths(linkedRows) {
+    const paths = {};
+    linkedRows.forEach(row => {
+        if (toNumber(row['ยอดอัพ P1']) > 0 && row.linkedP1Categories) {
+            const fromCats = parseCategories(row.linkedP1Categories);
+            const toCats = parseCategories(row['หมวดหมู่']);
+            const upP1Revenue = toNumber(row['ยอดอัพ P1']);
+
+            if (fromCats.length > 0 && toCats.length > 0) {
+                const revenuePortion = upP1Revenue / (fromCats.length * toCats.length);
+                fromCats.forEach(fromCat => {
+                    toCats.forEach(toCat => {
+                        const key = `${fromCat} -> ${toCat}`;
+                        if (!paths[key]) {
+                            paths[key] = { from: fromCat, to: toCat, count: 0, totalUpP1Revenue: 0, transactions: [] };
+                        }
+                        paths[key].count++;
+                        paths[key].totalUpP1Revenue += revenuePortion;
+                        paths[key].transactions.push(row);
+                    });
+                });
+            }
+        }
+    });
+    return Object.values(paths).sort((a, b) => b.totalUpP1Revenue - a.totalUpP1Revenue);
+}
+
+
 function calculateCategoryDetails(filteredRows) {
     const categoryMap = {};
-
     filteredRows.forEach(row => {
         const p1 = toNumber(row['P1']);
         const upP1 = toNumber(row['ยอดอัพ P1']);
@@ -145,7 +222,6 @@ function calculateCategoryDetails(filteredRows) {
             }
         }
     });
-
     return Object.values(categoryMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
 
@@ -156,6 +232,7 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
     });
     
     const summary = { totalBills: 0, totalCustomers: 0, totalRevenue: 0, newCustomers: 0, oldCustomers: 0, p1Revenue: 0, upP1Revenue: 0, upP2Revenue: 0, p1Bills: 0, p2Leads: 0, upP1Bills: 0, upP2Bills: 0 };
+    const channelBreakdown = {};
     filteredRows.forEach(row => {
         const p1 = toNumber(row['P1']);
         const upP1 = toNumber(row['ยอดอัพ P1']);
@@ -179,34 +256,74 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
         } else if (rowRevenue > 0) {
             summary.oldCustomers++;
         }
+
+        const channel = row['ช่องทาง'];
+        if (channel) {
+            if (!channelBreakdown[channel]) {
+                channelBreakdown[channel] = { p1: 0, p2: 0, upP2: 0, newCustomers: 0, revenue: 0 };
+            }
+            if (p1 > 0) channelBreakdown[channel].p1++;
+            if (p2) channelBreakdown[channel].p2++;
+            if (upP2 > 0) channelBreakdown[channel].upP2++;
+            if (isNewCustomer(row)) channelBreakdown[channel].newCustomers++;
+            channelBreakdown[channel].revenue += rowRevenue;
+        }
     });
     summary.totalCustomers = summary.newCustomers + summary.oldCustomers;
     
+    const linkedRows = linkP1AndUpP1(filteredRows);
+    const upsellPaths = calculateUpsellPaths(linkedRows);
     const categoryDetails = calculateCategoryDetails(filteredRows);
-    return { summary, categoryDetails };
+    return { summary, categoryDetails, filteredRows, channelBreakdown, upsellPaths };
 }
 
 // ================================================================
 // 7. RENDERING & POPUP FUNCTIONS
 // ================================================================
-function renderFunnelOverview(adsTotals, salesSummary) {
-    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number"><span>${value}</span></div><div class="stat-label">${label}</div></div>`;
+function renderFunnelOverview(adsTotals, salesSummary, comparisonSalesSummary = null) {
+    const createStatCard = (label, currentVal, prevVal, isCurrency = false, isROAS = false) => {
+        const displayVal = isROAS ? `${currentVal.toFixed(2)}x` : (isCurrency ? formatCurrency(currentVal) : formatNumber(currentVal));
+        let comparisonHtml = '';
+        if (comparisonSalesSummary && prevVal !== null) {
+            const growth = calculateGrowth(currentVal, prevVal);
+            const prevDisplay = isROAS ? `${prevVal.toFixed(2)}x` : (isCurrency ? formatCurrency(prevVal) : formatNumber(prevVal));
+            comparisonHtml = `
+                <span class="growth-indicator ${growth.class}">${growth.percent}</span>
+                <div class="stat-comparison">vs ${prevDisplay}</div>
+            `;
+        }
+        return `<div class="stat-card">
+                    <div class="stat-number">
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
+                    </div>
+                    <div class="stat-label">${label}</div>
+                </div>`;
+    };
+
     const spend = adsTotals.spend || 0;
     const revenue = salesSummary.totalRevenue || 0;
-    const newCustomers = salesSummary.newCustomers || 0;
     const roas = spend > 0 ? revenue / spend : 0;
+    const newCustomers = salesSummary.newCustomers || 0;
     const cpa = newCustomers > 0 ? spend / newCustomers : 0;
+    
+    let prevRoas = null;
+    if (comparisonSalesSummary) {
+        const prevRevenue = comparisonSalesSummary.totalRevenue || 0;
+        prevRoas = spend > 0 ? prevRevenue / spend : 0;
+    }
+
     ui.funnelStatsGrid.innerHTML = [
-        createStatCard('Ad Spend', formatCurrency(spend)),
-        createStatCard('Total Revenue', formatCurrency(revenue)),
-        createStatCard('ROAS', `${roas.toFixed(2)}x`),
-        createStatCard('Purchases', formatNumber(adsTotals.purchases)),
-        createStatCard('Cost Per Acquisition', formatCurrency(cpa)),
+        createStatCard('Ad Spend', spend, null, true),
+        createStatCard('Total Revenue', revenue, comparisonSalesSummary?.totalRevenue, true),
+        createStatCard('ROAS', roas, prevRoas, false, true),
+        createStatCard('Purchases', adsTotals.purchases, null),
+        createStatCard('Cost Per Acquisition', cpa, null, true),
     ].join('');
 }
 
 function renderAdsOverview(totals) {
-    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number"><span>${value}</span></div><div class="stat-label">${label}</div></div>`;
+    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number">${value}</div><div class="stat-label">${label}</div></div>`;
     ui.adsStatsGrid.innerHTML = [
         createStatCard('Impressions', formatNumber(totals.impressions)),
         createStatCard('Messaging Started', formatNumber(totals.messaging_conversations)),
@@ -215,41 +332,155 @@ function renderAdsOverview(totals) {
     ].join('');
 }
 
-function renderSalesOverview(summary) {
-    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number"><span>${value}</span></div><div class="stat-label">${label}</div></div>`;
+function renderSalesOverview(summary, comparisonSummary = null) {
+    const createStatCard = (label, currentVal, prevVal, isCurrency = false) => {
+        const displayVal = isCurrency ? formatCurrency(currentVal) : formatNumber(currentVal);
+        let comparisonHtml = '';
+        if (comparisonSummary && prevVal !== null) {
+            const growth = calculateGrowth(currentVal, prevVal);
+            const prevDisplay = isCurrency ? formatCurrency(prevVal) : formatNumber(prevVal);
+            comparisonHtml = `
+                <span class="growth-indicator ${growth.class}">${growth.percent}</span>
+                <div class="stat-comparison">vs ${prevDisplay}</div>
+            `;
+        }
+        return `<div class="stat-card">
+                    <div class="stat-number">
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
+                    </div>
+                    <div class="stat-label">${label}</div>
+                </div>`;
+    };
+    
     ui.salesOverviewStatsGrid.innerHTML = [
-        createStatCard('Total Bills', formatNumber(summary.totalBills)),
-        createStatCard('Total Sales Revenue', formatCurrency(summary.totalRevenue)),
-        createStatCard('Total Customers', formatNumber(summary.totalCustomers)),
-        createStatCard('New Customers', formatNumber(summary.newCustomers)),
+        createStatCard('Total Bills', summary.totalBills, comparisonSummary?.totalBills),
+        createStatCard('Total Sales Revenue', summary.totalRevenue, comparisonSummary?.totalRevenue, true),
+        createStatCard('Total Customers', summary.totalCustomers, comparisonSummary?.totalCustomers),
+        createStatCard('New Customers', summary.newCustomers, comparisonSummary?.newCustomers),
     ].join('');
 }
 
-function renderSalesRevenueBreakdown(summary) {
-    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number"><span>${value}</span></div><div class="stat-label">${label}</div></div>`;
+function renderSalesRevenueBreakdown(summary, comparisonSummary = null) {
+    const createStatCard = (label, currentVal, prevVal, isCurrency = true) => {
+        const displayVal = formatCurrency(currentVal);
+        let comparisonHtml = '';
+        if (comparisonSummary && prevVal !== null) {
+            const growth = calculateGrowth(currentVal, prevVal);
+            const prevDisplay = formatCurrency(prevVal);
+            comparisonHtml = `
+                <span class="growth-indicator ${growth.class}">${growth.percent}</span>
+                <div class="stat-comparison">vs ${prevDisplay}</div>
+            `;
+        }
+        return `<div class="stat-card">
+                    <div class="stat-number">
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
+                    </div>
+                    <div class="stat-label">${label}</div>
+                </div>`;
+    };
     ui.salesRevenueStatsGrid.innerHTML = [
-        createStatCard('P1 Revenue', formatCurrency(summary.p1Revenue)),
-        createStatCard('UP P1 Revenue', formatCurrency(summary.upP1Revenue)),
-        createStatCard('UP P2 Revenue', formatCurrency(summary.upP2Revenue)),
+        createStatCard('P1 Revenue', summary.p1Revenue, comparisonSummary?.p1Revenue),
+        createStatCard('UP P1 Revenue', summary.upP1Revenue, comparisonSummary?.upP1Revenue),
+        createStatCard('UP P2 Revenue', summary.upP2Revenue, comparisonSummary?.upP2Revenue),
     ].join('');
-    charts.revenue.data.datasets[0].data = [summary.p1Revenue, summary.upP1Revenue, summary.upP2Revenue];
-    charts.customer.data.datasets[0].data = [summary.newCustomers, summary.oldCustomers];
-    charts.revenue.update();
-    charts.customer.update();
+    if (charts.revenue) {
+        charts.revenue.data.datasets[0].data = [summary.p1Revenue, summary.upP1Revenue, summary.upP2Revenue];
+        charts.revenue.update();
+    }
+    if (charts.customer) {
+        charts.customer.data.datasets[0].data = [summary.newCustomers, summary.oldCustomers];
+        charts.customer.update();
+    }
 }
 
-function renderSalesBillStats(summary) {
-    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number"><span>${value}</span></div><div class="stat-label">${label}</div></div>`;
+function renderSalesBillStats(summary, comparisonSummary = null) {
+    const createStatCard = (label, currentVal, prevVal, isRate = false) => {
+        const displayVal = isRate ? `${currentVal.toFixed(1)}%` : formatNumber(currentVal);
+        let comparisonHtml = '';
+        if (comparisonSummary && prevVal !== null) {
+            const growth = calculateGrowth(currentVal, prevVal);
+            const prevDisplay = isRate ? `${prevVal.toFixed(1)}%` : formatNumber(prevVal);
+            comparisonHtml = `
+                <span class="growth-indicator ${growth.class}">${growth.percent}</span>
+                <div class="stat-comparison">vs ${prevDisplay}</div>
+            `;
+        }
+         return `<div class="stat-card">
+                    <div class="stat-number">
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
+                    </div>
+                    <div class="stat-label">${label}</div>
+                </div>`;
+    };
     const p1ToUpP1Rate = summary.p1Bills > 0 ? (summary.upP1Bills / summary.p1Bills) * 100 : 0;
     const p2ConversionRate = summary.p2Leads > 0 ? (summary.upP2Bills / summary.p2Leads) * 100 : 0;
+    
+    let prevP1ToUpP1Rate = null, prevP2ConversionRate = null;
+    if(comparisonSummary){
+        prevP1ToUpP1Rate = comparisonSummary.p1Bills > 0 ? (comparisonSummary.upP1Bills / comparisonSummary.p1Bills) * 100 : 0;
+        prevP2ConversionRate = comparisonSummary.p2Leads > 0 ? (comparisonSummary.upP2Bills / comparisonSummary.p2Leads) * 100 : 0;
+    }
+
     ui.salesBillStatsGrid.innerHTML = [
-        createStatCard('P1 Bills', formatNumber(summary.p1Bills)),
-        createStatCard('P2 Leads', formatNumber(summary.p2Leads)),
-        createStatCard('UP P1 Bills', formatNumber(summary.upP1Bills)),
-        createStatCard('UP P2 Bills', formatNumber(summary.upP2Bills)),
-        createStatCard('P1 → UP P1 Rate', `${p1ToUpP1Rate.toFixed(1)}%`),
-        createStatCard('P2 Conversion Rate', `${p2ConversionRate.toFixed(1)}%`),
+        createStatCard('P1 Bills', summary.p1Bills, comparisonSummary?.p1Bills),
+        createStatCard('P2 Leads', summary.p2Leads, comparisonSummary?.p2Leads),
+        createStatCard('UP P1 Bills', summary.upP1Bills, comparisonSummary?.upP1Bills),
+        createStatCard('UP P2 Bills', summary.upP2Bills, comparisonSummary?.upP2Bills),
+        createStatCard('P1 → UP P1 Rate', p1ToUpP1Rate, prevP1ToUpP1Rate, true),
+        createStatCard('P2 Conversion Rate', p2ConversionRate, prevP2ConversionRate, true),
     ].join('');
+}
+
+function renderChannelTable(channelData) {
+    const tableBody = ui.channelTableBody;
+    if (!channelData || Object.keys(channelData).length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">ไม่พบข้อมูลช่องทาง</td></tr>`;
+        return;
+    }
+
+    const totals = { p1: 0, p2: 0, upP2: 0, newCustomers: 0, revenue: 0 };
+    
+    const sortedChannels = Object.keys(channelData).sort((a, b) => {
+        return (channelData[b].revenue || 0) - (channelData[a].revenue || 0);
+    });
+
+    let tableHtml = sortedChannels.map(channel => {
+        const data = channelData[channel];
+        
+        totals.p1 += data.p1;
+        totals.p2 += data.p2;
+        totals.upP2 += data.upP2;
+        totals.newCustomers += data.newCustomers;
+        totals.revenue += data.revenue;
+
+        return `
+            <tr>
+                <td data-label="ช่องทาง"><strong>${channel}</strong></td>
+                <td data-label="บิล P1">${data.p1.toLocaleString()}</td>
+                <td data-label="P2 Leads">${data.p2.toLocaleString()}</td>
+                <td data-label="บิล UP P2">${data.upP2.toLocaleString()}</td>
+                <td data-label="ลูกค้าใหม่">${data.newCustomers.toLocaleString()}</td>
+                <td data-label="ยอดขาย" class="revenue-cell">฿${Math.round(data.revenue).toLocaleString()}</td>
+            </tr>
+        `;
+    }).join('');
+    
+    tableHtml += `
+        <tr style="font-weight: bold; border-top: 2px solid var(--neon-cyan);">
+            <td data-label="ยอดรวม"><strong>รวมทั้งหมด</strong></td>
+            <td data-label="รวมบิล P1">${totals.p1.toLocaleString()}</td>
+            <td data-label="รวม P2 Leads">${totals.p2.toLocaleString()}</td>
+            <td data-label="รวมบิล UP P2">${totals.upP2.toLocaleString()}</td>
+            <td data-label="รวมลูกค้าใหม่">${totals.newCustomers.toLocaleString()}</td>
+            <td data-label="รวมยอดขาย" class="revenue-cell">฿${Math.round(totals.revenue).toLocaleString()}</td>
+        </tr>
+    `;
+
+    tableBody.innerHTML = tableHtml;
 }
 
 function renderCampaignsTable(campaigns) {
@@ -258,25 +489,25 @@ function renderCampaignsTable(campaigns) {
         return;
     }
     ui.campaignsTableBody.innerHTML = campaigns.map(c => {
-            const insights = c.insights || {};
-            return `
-                <tr>
-                    <td><a href="#" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
-                    <td><span style="color:${c.status === 'ACTIVE' ? '#34d399' : '#a0a0b0'}">${c.status || 'N/A'}</span></td>
-                    <td class="revenue-cell">${formatCurrency(insights.spend)}</td>
-                    <td>${formatNumber(insights.impressions)}</td>
-                    <td>${formatNumber(insights.purchases)}</td>
-                    <td>${formatNumber(insights.messaging_conversations)}</td>
-                    <td>${formatCurrency(insights.cpm)}</td>
-                </tr>
-            `;
-        }).join('');
+        const insights = c.insights || {};
+        return `
+            <tr>
+                <td data-label="Campaign"><a href="#" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
+                <td data-label="Status"><span style="color:${c.status === 'ACTIVE' ? 'var(--color-positive)' : 'var(--text-secondary)'}">${c.status || 'N/A'}</span></td>
+                <td data-label="Spend (THB)" class="revenue-cell">${formatCurrency(insights.spend)}</td>
+                <td data-label="Impressions">${formatNumber(insights.impressions)}</td>
+                <td data-label="Purchases">${formatNumber(insights.purchases)}</td>
+                <td data-label="Messaging Conv.">${formatNumber(insights.messaging_conversations)}</td>
+                <td data-label="CPM">${formatCurrency(insights.cpm)}</td>
+            </tr>
+        `;
+    }).join('');
 }
 
 function renderCategoryChart(categoryData) {
     const chart = charts.categoryRevenue;
+    if (!chart) return;
     const topData = categoryData.slice(0, 15);
-
     chart.data.labels = topData.map(d => d.name);
     chart.data.datasets[0].data = topData.map(d => d.totalRevenue);
     chart.update();
@@ -284,27 +515,51 @@ function renderCategoryChart(categoryData) {
 
 function renderCategoryDetailTable(categoryDetails) {
     const rankClasses = ['gold', 'silver', 'bronze'];
-    ui.categoryDetailTableBody.innerHTML = categoryDetails.map((cat, index) => `
-        <tr>
+    ui.categoryDetailTableBody.innerHTML = categoryDetails.map((cat, index) => {
+        const safeCategoryName = cat.name.replace(/'/g, "\\'");
+        return `
+        <tr class="clickable-row" onclick="showCategoryDetailsPopup('${safeCategoryName}', 'ALL')">
             <td data-label="Rank" class="rank-column"><span class="rank-badge ${index < 3 ? rankClasses[index] : ''}">${index + 1}</span></td>
             <td data-label="Category"><strong>${cat.name}</strong></td>
             <td data-label="P1 Bills">
-                <span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'P1')">${formatNumber(cat.p1Bills)}</span>
+                <span class="clickable-cell" onclick="event.stopPropagation(); showCategoryDetailsPopup('${safeCategoryName}', 'P1')">${formatNumber(cat.p1Bills)}</span>
                 <small class="sub-revenue">${formatCurrencyShort(cat.p1Revenue)}</small>
             </td>
             <td data-label="UP P1 Bills">
-                <span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P1')">${formatNumber(cat.upP1Bills)}</span>
+                <span class="clickable-cell" onclick="event.stopPropagation(); showCategoryDetailsPopup('${safeCategoryName}', 'UP_P1')">${formatNumber(cat.upP1Bills)}</span>
                 <small class="sub-revenue">${formatCurrencyShort(cat.upP1Revenue)}</small>
             </td>
             <td data-label="UP P2 Bills">
-                <span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'UP_P2')">${formatNumber(cat.upP2Bills)}</span>
+                <span class="clickable-cell" onclick="event.stopPropagation(); showCategoryDetailsPopup('${safeCategoryName}', 'UP_P2')">${formatNumber(cat.upP2Bills)}</span>
                 <small class="sub-revenue">${formatCurrencyShort(cat.upP2Revenue)}</small>
             </td>
-            <td data-label="New Customers"><span class="clickable-cell" onclick="showCategoryDetailsPopup('${cat.name}', 'NEW_CUSTOMER')">${formatNumber(cat.newCustomers)}</span></td>
+            <td data-label="New Customers"><span class="clickable-cell" onclick="event.stopPropagation(); showCategoryDetailsPopup('${safeCategoryName}', 'NEW_CUSTOMER')">${formatNumber(cat.newCustomers)}</span></td>
             <td data-label="Total Revenue" class="revenue-cell">${formatCurrency(cat.totalRevenue)}</td>
         </tr>
-    `).join('');
+    `}).join('');
 }
+
+function renderUpsellPaths(paths) {
+    if (!paths || paths.length === 0) {
+        ui.upsellPathsTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">ไม่พบข้อมูล Upsell ในช่วงเวลานี้</td></tr>`;
+        return;
+    }
+    const rankClasses = ['gold', 'silver', 'bronze'];
+    ui.upsellPathsTableBody.innerHTML = paths.map((path, index) => {
+        const pathKey = `${path.from} -> ${path.to}`.replace(/'/g, "\\'");
+        return `
+            <tr>
+                <td data-label="Rank" class="rank-column"><span class="rank-badge ${index < 3 ? rankClasses[index] : ''}">${index+1}</span></td>
+                <td data-label="From (P1)">${path.from}</td>
+                <td data-label="To (UP P1)">${path.to}</td>
+                <td data-label="# of Upsells">${formatNumber(path.count)}</td>
+                <td data-label="UP P1 Revenue" class="revenue-cell">${formatCurrency(path.totalUpP1Revenue)}</td>
+                <td data-label="รายละเอียด"><button class="btn" style="padding: 4px 12px; font-size: 0.8em;" onclick="showUpsellPathDetails('${pathKey}')">ดู</button></td>
+            </tr>
+        `;
+    }).join('');
+}
+
 
 function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
     const categoryData = latestCategoryDetails.find(cat => cat.name === categoryName);
@@ -333,9 +588,10 @@ function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
     }
 
     ui.modalTitle.textContent = title;
+    ui.adSearchInput.style.display = 'none';
     
     if (filteredTransactions.length === 0) {
-        ui.modalBody.innerHTML = '<p style="text-align:center;">No matching transactions found.</p>';
+        ui.modalBody.innerHTML = '<p style="text-align:center; grid-column: 1 / -1;">No matching transactions found.</p>';
     } else {
         const tableRows = filteredTransactions
             .sort((a,b) => parseGvizDate(b['วันที่']) - parseGvizDate(a['วันที่']))
@@ -351,18 +607,19 @@ function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
 
                 return `
                 <tr>
-                    <td>${index + 1}</td>
-                    <td>${new Date(parseGvizDate(row['วันที่'])).toLocaleDateString('th-TH')}</td>
-                    <td>${row['ชื่อลูกค้า'] || 'N/A'}</td>
-                    <td>${row['หมวดหมู่'] || 'N/A'}</td>
-                    <td>${billTypes.join(', ') || 'N/A'}</td>
-                    <td class="revenue-cell">${formatCurrency(p1+upP1+upP2)}</td>
+                    <td data-label="ลำดับ">${index + 1}</td>
+                    <td data-label="Date">${new Date(parseGvizDate(row['วันที่'])).toLocaleDateString('th-TH')}</td>
+                    <td data-label="Customer Name">${row['ชื่อลูกค้า'] || 'N/A'}</td>
+                    <td data-label="รายการ">${row['หมวดหมู่'] || 'N/A'}</td>
+                    <td data-label="ประเภทบิล">${billTypes.join(', ') || 'N/A'}</td>
+                    <td data-label="Total Revenue" class="revenue-cell">${formatCurrency(p1+upP1+upP2)}</td>
                 </tr>
                 `;
         }).join('');
+        ui.modalBody.style.display = 'block';
         ui.modalBody.innerHTML = `
-            <div class="ad-card-details" style="padding:0;">
-                <table class="popup-table">
+            <div class="top-categories-table">
+                <table>
                     <thead>
                         <tr>
                             <th>ลำดับ</th>
@@ -380,6 +637,55 @@ function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
     }
     ui.modal.classList.add('show');
 }
+
+function showUpsellPathDetails(pathKey) {
+    const pathData = latestUpsellPaths.find(p => `${p.from} -> ${p.to}` === pathKey);
+    if (!pathData || !pathData.transactions) {
+        console.error("Upsell path data not found for key:", pathKey);
+        return;
+    }
+
+    const transactions = pathData.transactions;
+    ui.modalTitle.textContent = `Upsell Details: ${pathKey}`;
+    ui.adSearchInput.style.display = 'none';
+
+    if (transactions.length === 0) {
+        ui.modalBody.innerHTML = '<p style="text-align:center; grid-column: 1 / -1;">No transaction details found for this path.</p>';
+    } else {
+        const tableRows = transactions
+            .sort((a, b) => parseGvizDate(b['วันที่']) - parseGvizDate(a['วันที่']))
+            .map(row => {
+                const upP1 = toNumber(row['ยอดอัพ P1']);
+                return `
+                <tr>
+                    <td data-label="Date">${new Date(parseGvizDate(row['วันที่'])).toLocaleDateString('th-TH')}</td>
+                    <td data-label="Customer Name">${row['ชื่อลูกค้า'] || 'N/A'}</td>
+                    <td data-label="UP P1 Categories">${row['หมวดหมู่'] || 'N/A'}</td>
+                    <td data-label="UP P1 Revenue" class="revenue-cell">${formatCurrency(upP1)}</td>
+                </tr>
+                `;
+            }).join('');
+
+        ui.modalBody.style.display = 'block';
+        ui.modalBody.innerHTML = `
+            <div class="top-categories-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Customer Name</th>
+                            <th>UP P1 Categories</th>
+                            <th>UP P1 Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+        `;
+    }
+    ui.modal.classList.add('show');
+}
+
 
 function sortAndRenderCampaigns() {
     const { key, direction } = currentSort;
@@ -413,17 +719,6 @@ function sortAndRenderCampaigns() {
     renderCampaignsTable(filteredData);
 }
 
-function renderDailySpendChart(dailySpendData) {
-    const chart = charts.dailySpend;
-    if (!dailySpendData || dailySpendData.length === 0) {
-        chart.data.labels = []; chart.data.datasets[0].data = [];
-    } else {
-        chart.data.labels = dailySpendData.map(d => `${new Date(d.date).getDate()}/${new Date(d.date).getMonth() + 1}`);
-        chart.data.datasets[0].data = dailySpendData.map(d => d.spend);
-    }
-    chart.update();
-}
-
 function showAdDetails(campaignId) {
     const campaign = latestCampaignData.find(c => c.id === campaignId);
     if (!campaign) return;
@@ -431,37 +726,44 @@ function showAdDetails(campaignId) {
     ui.adSearchInput.value = '';
     currentPopupAds = campaign.ads || [];
     renderPopupAds(currentPopupAds);
+    ui.modalBody.style.display = 'grid'; // Reset display for ad cards
+    ui.adSearchInput.style.display = 'block';
     ui.modal.classList.add('show');
 }
 
 function renderPopupAds(ads) {
      if (!ads || ads.length === 0) {
-        ui.modalBody.innerHTML = `<p style="text-align: center;">No ads found for this campaign.</p>`;
+        ui.modalBody.innerHTML = `<p style="text-align: center; grid-column: 1 / -1;">No ads found for this campaign.</p>`;
     } else {
         ui.modalBody.innerHTML = ads
-            .sort((a,b) => b.insights.purchases - a.insights.purchases)
-            .map(ad => `
-            <div class="ad-card">
-                <div class="ad-card-image">
-                    <img src="${ad.thumbnail_url}" alt="Ad thumbnail">
-                </div>
-                <div class="ad-card-details">
-                    <h4>${ad.name}</h4>
-                    <div class="ad-card-stats">
-                        <div>Spend: <span>${formatCurrency(ad.insights.spend)}</span></div>
-                        <div>Impressions: <span>${formatNumber(ad.insights.impressions)}</span></div>
-                        <div>Purchases: <span>${formatNumber(ad.insights.purchases)}</span></div>
-                        <div>Messaging Started: <span>${formatNumber(ad.insights.messaging_conversations)}</span></div>
-                        <div>CPM: <span>${formatCurrency(ad.insights.cpm)}</span></div>
+            .sort((a,b) => (b.insights?.spend ?? 0) - (a.insights?.spend ?? 0))
+            .map(ad => {
+                const insights = ad.insights || {};
+                return `
+                <div class="ad-card">
+                    <div class="ad-card-image">
+                        <img src="${ad.thumbnail_url}" alt="Ad thumbnail" onerror="this.src='https://placehold.co/120x120/0d0c1d/a0a0b0?text=No+Image'">
+                    </div>
+                    <div class="ad-card-details">
+                        <h4>${ad.name}</h4>
+                        <div class="ad-card-stats">
+                            <div>Spend: <span>${formatCurrency(insights.spend)}</span></div>
+                            <div>Impressions: <span>${formatNumber(insights.impressions)}</span></div>
+                            <div>Purchases: <span>${formatNumber(insights.purchases)}</span></div>
+                            <div>Messaging: <span>${formatNumber(insights.messaging_conversations)}</span></div>
+                            <div>CPM: <span>${formatCurrency(insights.cpm)}</span></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `).join('');
+            `}).join('');
     }
 }
 
 function initializeModal() {
-    const closeModal = () => ui.modal.classList.remove('show');
+    const closeModal = () => {
+        ui.modal.classList.remove('show');
+        ui.modalBody.style.display = 'grid'; 
+    }
     ui.modalCloseBtn.addEventListener('click', closeModal);
     ui.modal.addEventListener('click', (event) => {
         if (event.target === ui.modal) closeModal();
@@ -473,21 +775,25 @@ function initializeCharts() {
     const gridColor = 'rgba(224, 224, 224, 0.1)';
     const categoryColors = ['#3B82F6', '#EC4899', '#84CC16', '#F59E0B', '#10B981', '#6366F1', '#D946EF', '#F97316', '#06B6D4', '#EAB308'].map(c => c + 'CC');
     
+    if (charts.dailySpend) charts.dailySpend.destroy();
     charts.dailySpend = new Chart(document.getElementById('dailySpendChart').getContext('2d'), {
         type: 'line', data: { labels: [], datasets: [{ label: 'Spend (THB)', data: [], borderColor: '#00f2fe', backgroundColor: 'rgba(0, 242, 254, 0.1)', fill: true, tension: 0.3 }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: textColor }, grid: { color: gridColor } }, y: { beginAtZero: true, ticks: { color: textColor, callback: v => '฿' + v.toLocaleString() }, grid: { color: gridColor } } } }
     });
 
+    if (charts.revenue) charts.revenue.destroy();
     charts.revenue = new Chart(document.getElementById('revenueChart').getContext('2d'), {
         type: 'bar', data: { labels: ['P1', 'UP P1', 'UP P2'], datasets: [{ label: 'Sales (THB)', data: [], backgroundColor: ['#3B82F6', '#EC4899', '#84CC16'] }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor } }, x: { ticks: { color: textColor }, grid: { color: 'transparent' } } } }
     });
 
+    if (charts.customer) charts.customer.destroy();
     charts.customer = new Chart(document.getElementById('customerChart').getContext('2d'), {
         type: 'doughnut', data: { labels:['New Customers','Old Customers'], datasets:[{ data:[], backgroundColor: ['#F59E0B', '#10B981'], borderColor: '#0d0c1d' }] },
         options: { responsive:true, maintainAspectRatio:false, plugins: { legend: { position: 'right', labels: { color: textColor } } } }
     });
 
+    if (charts.categoryRevenue) charts.categoryRevenue.destroy();
     charts.categoryRevenue = new Chart(ui.categoryRevenueChart.getContext('2d'), {
         type: 'bar',
         data: {
@@ -526,36 +832,65 @@ async function main() {
     ui.loading.classList.add('show');
     hideError();
     try {
-        const startDate = ui.startDate.value;
-        const endDate = ui.endDate.value;
+        const startDateStr = ui.startDate.value;
+        const endDateStr = ui.endDate.value;
+        if (!startDateStr || !endDateStr) {
+            throw new Error("Please select both a start and end date.");
+        }
+        
+        const isCompareMode = ui.compareToggle.checked;
         
         const [adsResponse, allSalesRows] = await Promise.all([
-            fetchAdsData(startDate, endDate),
+            fetchAdsData(startDateStr, endDateStr),
             fetchSalesData()
         ]);
 
+        const currentStartDate = new Date(startDateStr + 'T00:00:00');
+        const currentEndDate = new Date(endDateStr + 'T23:59:59');
+        const salesData = processSalesDataForPeriod(allSalesRows, currentStartDate, currentEndDate);
+        latestCategoryDetails = salesData.categoryDetails;
+        latestUpsellPaths = salesData.upsellPaths;
+        
+        let comparisonSalesData = null;
+        if (isCompareMode) {
+            const compareStartDateStr = ui.compareStartDate.value;
+            const compareEndDateStr = ui.compareEndDate.value;
+            if (!compareStartDateStr || !compareEndDateStr) {
+                 throw new Error("Please select both a start and end date for comparison.");
+            }
+            const compareStartDate = new Date(compareStartDateStr + 'T00:00:00');
+            const compareEndDate = new Date(compareEndDateStr + 'T23:59:59');
+            comparisonSalesData = processSalesDataForPeriod(allSalesRows, compareStartDate, compareEndDate);
+            latestComparisonData = comparisonSalesData;
+        } else {
+            latestComparisonData = null;
+        }
+        
         if (adsResponse.success) {
             latestCampaignData = adsResponse.data.campaigns;
-            const salesData = processSalesDataForPeriod(allSalesRows, new Date(startDate + 'T00:00:00'), new Date(endDate + 'T23:59:59'));
             
-            latestCategoryDetails = salesData.categoryDetails;
-            
-            renderFunnelOverview(adsResponse.totals, salesData.summary);
+            renderFunnelOverview(adsResponse.totals, salesData.summary, comparisonSalesData?.summary);
             renderAdsOverview(adsResponse.totals);
-            renderSalesOverview(salesData.summary);
-            renderSalesRevenueBreakdown(salesData.summary);
-            renderSalesBillStats(salesData.summary);
+            renderSalesOverview(salesData.summary, comparisonSalesData?.summary);
+            renderSalesRevenueBreakdown(salesData.summary, comparisonSalesData?.summary);
+            renderSalesBillStats(salesData.summary, comparisonSalesData?.summary);
+            
             sortAndRenderCampaigns();
-            renderDailySpendChart(adsResponse.data.dailySpend);
             renderCategoryChart(salesData.categoryDetails);
             renderCategoryDetailTable(salesData.categoryDetails);
+            renderChannelTable(salesData.channelBreakdown);
+            renderUpsellPaths(salesData.upsellPaths);
+            
+            charts.dailySpend.data.labels = adsResponse.data.dailySpend.map(d => `${new Date(d.date).getDate()}/${new Date(d.date).getMonth() + 1}`);
+            charts.dailySpend.data.datasets[0].data = adsResponse.data.dailySpend.map(d => d.spend);
+            charts.dailySpend.update();
 
         } else {
             throw new Error(adsResponse.error || 'Unknown API error');
         }
 
     } catch (err) {
-        showError(`Error: ${err.message}`);
+        showError(`Error: ${err.message}\nPlease check your network connection and date selections.`);
         console.error(err);
     } finally {
         ui.loading.classList.remove('show');
@@ -564,12 +899,16 @@ async function main() {
 
 function setDefaultDates() {
     const today = new Date();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(today.getDate() - 29);
+    const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    const firstDayLastMonth = new Date(lastDayLastMonth.getFullYear(), lastDayLastMonth.getMonth(), 1);
     
     const toInputFormat = (date) => date.toISOString().split('T')[0];
+
     ui.endDate.value = toInputFormat(today);
-    ui.startDate.value = toInputFormat(thirtyDaysAgo);
+    ui.startDate.value = toInputFormat(firstDayThisMonth);
+    ui.compareEndDate.value = toInputFormat(lastDayLastMonth);
+    ui.compareStartDate.value = toInputFormat(firstDayLastMonth);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -579,8 +918,17 @@ document.addEventListener('DOMContentLoaded', () => {
     main();
 
     ui.refreshBtn.addEventListener('click', main);
-    ui.startDate.addEventListener('change', main);
-    ui.endDate.addEventListener('change', main);
+    
+    const allControls = [
+        ui.startDate, ui.endDate, ui.compareStartDate, 
+        ui.compareEndDate, ui.compareToggle
+    ];
+    allControls.forEach(input => input.addEventListener('change', main));
+
+    ui.compareToggle.addEventListener('change', () => {
+         ui.compareControls.classList.toggle('show', ui.compareToggle.checked);
+    });
+
     ui.campaignSearchInput.addEventListener('input', sortAndRenderCampaigns);
     ui.adSearchInput.addEventListener('input', (e) => {
         const searchTerm = e.target.value.toLowerCase();
