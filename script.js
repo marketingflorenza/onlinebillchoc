@@ -233,6 +233,7 @@ function calculateCategoryDetails(filteredRows) {
     return Object.values(categoryMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
 
+// vvvvvvvvvvvvvvvvvvvv  THIS FUNCTION IS MODIFIED  vvvvvvvvvvvvvvvvvvvv
 function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
     const filteredRows = allSalesRows.filter(row => {
         const d = parseGvizDate(row['วันที่']);
@@ -277,13 +278,16 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
             channelBreakdown[channel].revenue += rowRevenue;
         }
     });
-    summary.totalCustomers = summary.newCustomers + summary.oldCustomers;
+
+    // The calculation for totalCustomers has been changed as requested.
+    summary.totalCustomers = summary.p1Bills + summary.upP2Bills;
     
     const linkedRows = linkP1AndUpP1(filteredRows);
     const upsellPaths = calculateUpsellPaths(linkedRows);
     const categoryDetails = calculateCategoryDetails(filteredRows);
     return { summary, categoryDetails, filteredRows, channelBreakdown, upsellPaths };
 }
+// ^^^^^^^^^^^^^^^^^^^^  END OF MODIFIED FUNCTION  ^^^^^^^^^^^^^^^^^^^^
 
 // ================================================================
 // 7. RENDERING & POPUP FUNCTIONS
@@ -440,7 +444,6 @@ function renderSalesBillStats(summary, comparisonSummary = null) {
     ].join('');
 }
 
-// vvvvvvvvvvvvvvvvvvvv  ฟังก์ชันนี้ถูกแก้ไข vvvvvvvvvvvvvvvvvvvv
 function renderChannelTable(channelData) {
     const tableBody = ui.channelTableBody;
     if (!channelData || Object.keys(channelData).length === 0) {
@@ -505,8 +508,6 @@ function renderChannelTable(channelData) {
 
     tableBody.innerHTML = tableHtml;
 }
-// ^^^^^^^^^^^^^^^^^^^^  ฟังก์ชันนี้ถูกแก้ไข ^^^^^^^^^^^^^^^^^^^^
-
 
 function renderCampaignsTable(campaigns) {
     if (!campaigns || campaigns.length === 0) {
@@ -584,7 +585,6 @@ function renderUpsellPaths(paths) {
     }).join('');
 }
 
-// vvvvvvvvvvvvvvvvvvvv  เพิ่มฟังก์ชันใหม่นี้ vvvvvvvvvvvvvvvvvvvv
 function showChannelDetailsPopup(channelName, metricType) {
     let filteredTransactions = [];
     let title = '';
@@ -669,8 +669,6 @@ function showChannelDetailsPopup(channelName, metricType) {
     }
     ui.modal.classList.add('show');
 }
-// ^^^^^^^^^^^^^^^^^^^^  เพิ่มฟังก์ชันใหม่นี้ ^^^^^^^^^^^^^^^^^^^^
-
 
 function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
     const categoryData = latestCategoryDetails.find(cat => cat.name === categoryName);
@@ -796,7 +794,6 @@ function showUpsellPathDetails(pathKey) {
     }
     ui.modal.classList.add('show');
 }
-
 
 function sortAndRenderCampaigns() {
     const { key, direction } = currentSort;
@@ -963,7 +960,7 @@ async function main() {
         const salesData = processSalesDataForPeriod(allSalesRows, currentStartDate, currentEndDate);
         latestCategoryDetails = salesData.categoryDetails;
         latestUpsellPaths = salesData.upsellPaths;
-        latestFilteredSalesRows = salesData.filteredRows; // <-- เพิ่มบรรทัดนี้
+        latestFilteredSalesRows = salesData.filteredRows; 
         
         let comparisonSalesData = null;
         if (isCompareMode && comparisonAdsResponse?.success) {
