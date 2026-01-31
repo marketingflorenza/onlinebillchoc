@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Online Choc</title>
+    <title>Online Choc - Dashboard</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -27,7 +27,8 @@
                          <label>End: <input type="date" id="compareEndDate" /></label>
                     </div>
                 </div>
-                 <div class="control-row" style="justify-content: flex-end;">
+                 <div class="control-row" style="justify-content: flex-end; gap: 10px;">
+                     <button class="btn" id="aiSummaryBtn" style="border-color: var(--neon-magenta); color: var(--neon-magenta); box-shadow: 0 0 8px rgba(255, 0, 242, 0.4);">✨ AI Summary</button>
                      <button class="btn" id="refreshBtn">รีเฟรช / คำนวณ</button>
                  </div>
             </div>
@@ -129,7 +130,7 @@
         </div>
         <div class="glass-panel top-categories-table scrollable-table">
             <h2 class="chart-title">🔁 P1 to UP P1 Upsell Flow Analysis</h2>
-            <p class="description">ตารางนี้แสดงว่าลูกค้าที่ซื้อสินค้า/บริการในหมวดหมู่ P1 (From) ได้อัปเกรดไปซื้ออะไรต่อในหมวดหมู่ UP P1 (To) และสร้างรายได้เท่าไหร่จากการอัปเกรดนั้น</p>
+            <p class="description">ตารางสรุปการอัปเกรดสินค้า</p>
             <table>
                 <thead>
                     <tr>
@@ -154,6 +155,20 @@
                 <span class="modal-close-btn">&times;</span>
             </div>
             <div id="modalBody" class="modal-body"></div>
+        </div>
+    </div>
+
+    <div id="aiModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>✨ AI Insights Summary</h2>
+                <span class="modal-close-btn" id="aiModalClose">&times;</span>
+            </div>
+            <div id="aiModalBody" class="modal-body table-view" style="color: var(--text-primary); line-height: 1.6; font-size: 0.95rem;">
+                </div>
+            <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn" id="copyAiText">คัดลอกข้อความ</button>
+            </div>
         </div>
     </div>
 
