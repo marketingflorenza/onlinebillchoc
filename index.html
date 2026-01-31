@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title> Online Sriracha </title>
+    <title>Online Sriracha - AI Dashboard</title>
     
     <link rel="stylesheet" href="style.css" />
 
@@ -16,7 +16,7 @@
 <body>
     <div class="container">
         <div class="topbar glass-panel">
-            <h1>🚀 Online Sriracha </h1>
+            <h1>🚀 Online Sriracha</h1>
             <div class="controls">
                 <div class="control-row">
                     <label><strong>ช่วงเวลาปัจจุบัน:</strong></label>
@@ -30,15 +30,29 @@
                          <label>End: <input type="date" id="compareEndDate" /></label>
                     </div>
                 </div>
-                 <div class="control-row" style="justify-content: flex-end;">
-                     <button class="btn" id="refreshBtn">รีเฟรช / คำนวณ</button>
-                 </div>
+                <div class="control-row" style="justify-content: flex-end;">
+                    <button class="btn" id="refreshBtn">รีเฟรช / คำนวณ</button>
+                </div>
             </div>
         </div>
+
         <div class="error-message" id="errorMessage"></div>
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>กำลังดึงข้อมูล...</p>
+            <p>กำลังดึงข้อมูลและประมวลผล...</p>
+        </div>
+
+        <div class="glass-panel ai-summary-panel">
+            <div class="section-header">
+                <h2 style="font-size: 1.5rem; display: flex; align-items: center; gap: 12px;">
+                    <span>🤖</span> AI Business Intelligence Analysis
+                </h2>
+            </div>
+            <div id="aiSummaryContent">
+                <p style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                    กรุณากดปุ่ม "รีเฟรช / คำนวณ" เพื่อให้ AI เริ่มต้นวิเคราะห์ข้อมูล
+                </p>
+            </div>
         </div>
         
         <div class="section-header"><h2>🎯 Marketing Funnel Overview</h2></div>
@@ -46,12 +60,14 @@
 
         <div class="section-header" style="margin-top: 40px;"><h2>📊 Marketing Performance</h2></div>
         <div class="stats-grid" id="adsStatsGrid"></div>
+        
         <div class="glass-panel">
             <h2 class="chart-title">💰 Daily Ad Spend</h2>
             <div class="chart-wrapper-large">
                 <canvas id="dailySpendChart"></canvas>
             </div>
         </div>
+
         <div class="glass-panel top-categories-table scrollable-table">
             <div class="table-header">
                 <h2 class="chart-title">📋 Campaign Details</h2>
@@ -76,8 +92,10 @@
         <div class="section-header" style="margin-top: 40px;"><h2>💰 Sales Performance</h2></div>
         <div class="stats-grid" id="salesOverviewStatsGrid"></div>
         <div class="stats-grid" id="salesRevenueStatsGrid"></div>
+        
         <h2 class="chart-title">📊 Leads & Bill Summary</h2>
         <div class="stats-grid" id="salesBillStatsGrid"></div>
+
         <div class="grid-2-cols glass-panel">
             <div class="chart-container">
                 <div class="chart-title">Sales by Type</div>
@@ -132,15 +150,14 @@
                         <th>Total Revenue</th>
                     </tr>
                 </thead>
-                <tbody id="categoryDetailTableBody">
-                </tbody>
+                <tbody id="categoryDetailTableBody"></tbody>
             </table>
         </div>
         
         <div class="glass-panel top-categories-table scrollable-table">
             <h2 class="chart-title">🔁 P1 to UP P1 Upsell Flow Analysis</h2>
             <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 20px;">
-                ตารางนี้แสดงว่าลูกค้าที่ซื้อสินค้า/บริการในหมวดหมู่ P1 (From) ได้อัปเกรดไปซื้ออะไรต่อในหมวดหมู่ UP P1 (To) และสร้างรายได้เท่าไหร่จากการอัปเกรดนั้น
+                ตารางสรุปการอัปเกรดสินค้าจากหมวดหมู่ P1 ไปยังหมวดหมู่ UP P1
             </p>
             <table>
                 <thead>
@@ -156,7 +173,6 @@
                 <tbody id="upsellPathsTableBody"></tbody>
             </table>
         </div>
-
     </div>
 
     <div id="detailsModal" class="modal-overlay">
