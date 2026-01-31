@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Online Choc</title>
+    <title>Online Choc Dashboard</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -51,6 +51,7 @@
                 <canvas id="dailySpendChart"></canvas>
             </div>
         </div>
+        
         <div class="glass-panel top-categories-table scrollable-table">
             <div class="table-header">
                 <h2 class="chart-title">📋 Campaign Details</h2>
@@ -75,8 +76,10 @@
         <div class="section-header" style="margin-top: 40px;"><h2>💰 Sales Performance</h2></div>
         <div class="stats-grid" id="salesOverviewStatsGrid"></div>
         <div class="stats-grid" id="salesRevenueStatsGrid"></div>
+        
         <h2 class="chart-title">📊 Leads & Bill Summary</h2>
         <div class="stats-grid" id="salesBillStatsGrid"></div>
+        
         <div class="grid-2-cols glass-panel">
             <div class="chart-container">
                 <div class="chart-title">Sales by Type</div>
@@ -87,6 +90,7 @@
                 <div class="chart-wrapper-small"><canvas id="customerChart"></canvas></div>
             </div>
         </div>
+
         <div class="glass-panel top-categories-table">
             <h2 class="chart-title">📡 ตารางสรุปช่องทางการติดต่อ</h2>
             <table>
@@ -110,9 +114,10 @@
                 <canvas id="categoryRevenueChart"></canvas>
             </div>
         </div>
+        
         <div class="glass-panel top-categories-table scrollable-table" style="margin-top: 22px;">
             <h2 class="chart-title">📋 Detailed Category Performance</h2>
-            <p class="description">คลิกที่ตัวเลขเพื่อดูรายละเอียดธุรกรรมของแต่ละหมวดหมู่</p>
+            <p class="description">คลิกที่ตัวเลขเพื่อดูรายละเอียดธุรกรรม</p>
             <table>
                 <thead>
                     <tr>
@@ -125,23 +130,6 @@
                     </tr>
                 </thead>
                 <tbody id="categoryDetailTableBody"></tbody>
-            </table>
-        </div>
-        <div class="glass-panel top-categories-table scrollable-table">
-            <h2 class="chart-title">🔁 P1 to UP P1 Upsell Flow Analysis</h2>
-            <p class="description">ตารางสรุปการอัปเกรดสินค้า</p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Rank</th>
-                        <th>From (P1 Category)</th>
-                        <th>To (UP P1 Category)</th>
-                        <th># of Upsells</th>
-                        <th>Total UP P1 Revenue</th>
-                        <th>รายละเอียด</th>
-                    </tr>
-                </thead>
-                <tbody id="upsellPathsTableBody"></tbody>
             </table>
         </div>
     </div>
@@ -164,7 +152,7 @@
                 <span class="modal-close-btn" id="aiModalClose">&times;</span>
             </div>
             <div id="aiModalBody" class="modal-body table-view" style="color: var(--text-primary); line-height: 1.6; font-size: 0.95rem;"></div>
-            <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+            <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
                 <button class="btn" id="copyAiText">คัดลอกข้อความ</button>
             </div>
         </div>
