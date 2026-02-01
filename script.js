@@ -46,7 +46,7 @@ let charts = {};
 let latestCampaignData = [];
 let latestCategoryDetails = [];
 let latestUpsellPaths = [];
-let latestFilteredSalesRows = [];
+let latestFilteredSalesRows = []; // <-- เพิ่มตัวแปรนี้
 let currentPopupAds = [];
 let currentSort = { key: 'spend', direction: 'desc' };
 let allSalesDataCache = [];
@@ -97,26 +97,22 @@ function calculateGrowth(current, previous) {
 async function fetchAdsData(startDate, endDate) {
     const since = startDate.split('-').reverse().join('-');
     const until = endDate.split('-').reverse().join('-');
-    const apiUrl = `${CONFIG.API_BASE_URL}/databillSriracha?since=${since}&until=${until}`; // <<< CORRECTED ENDPOINT
+    const apiUrl = `${CONFIG.API_BASE_URL}/databillChoc?since=${since}&until=${until}`;
     try {
         const response = await fetch(apiUrl);
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ads API error (${response.status}) - ${errorText}`);
+            throw new Error(`Ads API error (${response.status}) - ${await response.text()}`);
         }
         return response.json();
     } catch (error) {
          if (error instanceof TypeError && error.message.includes('fetch')) {
-             throw new Error(`<b>Error: Failed to fetch API data.</b><br>This is likely a CORS issue. Please run this file on a local server (like VS Code's "Live Server" extension) to resolve.`);
-         }
+            throw new Error(`<b>Error: Failed to fetch API data.</b><br>This is likely a CORS issue. Please run this file on a local server (like VS Code's "Live Server" extension) to resolve.`);
+        }
         throw error;
     }
 }
 
 async function fetchSalesData() {
-    // Force a cache refresh when sheet ID might have changed
-    allSalesDataCache = [];
-    
     if (allSalesDataCache.length > 0) return allSalesDataCache;
     const sheetUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${CONFIG.SHEET_NAME_SUMMARY}`;
     const response = await fetch(sheetUrl);
@@ -191,6 +187,7 @@ function calculateUpsellPaths(linkedRows) {
     return Object.values(paths).sort((a, b) => b.totalUpP1Revenue - a.totalUpP1Revenue);
 }
 
+
 function calculateCategoryDetails(filteredRows) {
     const categoryMap = {};
     filteredRows.forEach(row => {
@@ -236,6 +233,7 @@ function calculateCategoryDetails(filteredRows) {
     return Object.values(categoryMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
 
+// vvvvvvvvvvvvvvvvvvvv  THIS FUNCTION IS MODIFIED  vvvvvvvvvvvvvvvvvvvv
 function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
     const filteredRows = allSalesRows.filter(row => {
         const d = parseGvizDate(row['วันที่']);
@@ -280,8 +278,8 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
             channelBreakdown[channel].revenue += rowRevenue;
         }
     });
-    
-    // <<< FIXED: Updated Total Customers calculation to match previous logic
+
+    // The calculation for totalCustomers has been changed as requested.
     summary.totalCustomers = summary.p1Bills + summary.upP2Bills;
     
     const linkedRows = linkP1AndUpP1(filteredRows);
@@ -289,6 +287,7 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
     const categoryDetails = calculateCategoryDetails(filteredRows);
     return { summary, categoryDetails, filteredRows, channelBreakdown, upsellPaths };
 }
+// ^^^^^^^^^^^^^^^^^^^^  END OF MODIFIED FUNCTION  ^^^^^^^^^^^^^^^^^^^^
 
 // ================================================================
 // 7. RENDERING & POPUP FUNCTIONS
@@ -307,8 +306,8 @@ function renderFunnelOverview(adsTotals, salesSummary, comparisonAdsTotals = nul
         }
         return `<div class="stat-card">
                     <div class="stat-number">
-                        <span>${displayVal}</span>
-                        ${comparisonHtml}
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
                     </div>
                     <div class="stat-label">${label}</div>
                 </div>`;
@@ -317,22 +316,22 @@ function renderFunnelOverview(adsTotals, salesSummary, comparisonAdsTotals = nul
     const spend = adsTotals.spend || 0;
     const revenue = salesSummary.totalRevenue || 0;
     const roas = spend > 0 ? revenue / spend : 0;
-    const purchases = adsTotals.purchases || 0;
-    const cpa = purchases > 0 ? spend / purchases : 0;
+    const newCustomers = salesSummary.newCustomers || 0;
+    const cpa = newCustomers > 0 ? spend / newCustomers : 0;
     
     const prevSpend = comparisonAdsTotals?.spend || 0;
     const prevRevenue = comparisonSalesSummary?.summary.totalRevenue || 0;
     const prevRoas = prevSpend > 0 ? prevRevenue / prevSpend : 0;
-    const prevPurchases = comparisonAdsTotals?.purchases || 0;
-    const prevCpa = prevPurchases > 0 ? prevSpend / prevPurchases : 0;
+    const prevNewCustomers = comparisonSalesSummary?.summary.newCustomers || 0;
+    const prevCpa = prevNewCustomers > 0 ? prevSpend / prevNewCustomers : 0;
 
 
     ui.funnelStatsGrid.innerHTML = [
         createStatCard('Ad Spend', spend, prevSpend, true),
         createStatCard('Total Revenue', revenue, prevRevenue, true),
         createStatCard('ROAS', roas, prevRoas, false, true),
-        createStatCard('Purchases', purchases, prevPurchases),
-        createStatCard('Cost Per Purchase', cpa, prevCpa, true),
+        createStatCard('Purchases', adsTotals.purchases, comparisonAdsTotals?.purchases || 0),
+        createStatCard('Cost Per Acquisition', cpa, prevCpa, true),
     ].join('');
 }
 
@@ -360,8 +359,8 @@ function renderSalesOverview(summary, comparisonSummary = null) {
         }
         return `<div class="stat-card">
                     <div class="stat-number">
-                        <span>${displayVal}</span>
-                        ${comparisonHtml}
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
                     </div>
                     <div class="stat-label">${label}</div>
                 </div>`;
@@ -389,8 +388,8 @@ function renderSalesRevenueBreakdown(summary, comparisonSummary = null) {
         }
         return `<div class="stat-card">
                     <div class="stat-number">
-                        <span>${displayVal}</span>
-                        ${comparisonHtml}
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
                     </div>
                     <div class="stat-label">${label}</div>
                 </div>`;
@@ -420,8 +419,8 @@ function renderSalesBillStats(summary, comparisonSummary = null) {
         }
          return `<div class="stat-card">
                     <div class="stat-number">
-                        <span>${displayVal}</span>
-                        ${comparisonHtml}
+                       <span>${displayVal}</span>
+                       ${comparisonHtml}
                     </div>
                     <div class="stat-label">${label}</div>
                 </div>`;
@@ -454,7 +453,7 @@ function renderChannelTable(channelData) {
 
     const renderClickableNumber = (count, channel, metric) => {
         if (count > 0) {
-            const safeChannel = channel.replace(/'/g, "\\'");
+            const safeChannel = channel.replace(/'/g, "\\'"); // Escape quotes for JS
             return `<span class="clickable-cell" onclick="showChannelDetailsPopup('${safeChannel}', '${metric}')">${count.toLocaleString()}</span>`;
         }
         return count.toLocaleString();
@@ -471,7 +470,9 @@ function renderChannelTable(channelData) {
 
     const totals = { p1: 0, p2: 0, upP2: 0, newCustomers: 0, revenue: 0 };
     
-    const sortedChannels = Object.keys(channelData).sort((a, b) => (channelData[b].revenue || 0) - (channelData[a].revenue || 0));
+    const sortedChannels = Object.keys(channelData).sort((a, b) => {
+        return (channelData[b].revenue || 0) - (channelData[a].revenue || 0);
+    });
 
     let tableHtml = sortedChannels.map(channel => {
         const data = channelData[channel];
@@ -514,7 +515,7 @@ function renderCampaignsTable(campaigns) {
         return;
     }
     ui.campaignsTableBody.innerHTML = campaigns.map(c => {
-        const insights = c.insights || { spend: 0, impressions: 0, purchases: 0, messaging_conversations: 0, cpm: 0 };
+        const insights = c.insights || {};
         return `
             <tr>
                 <td><a href="#" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
@@ -531,7 +532,7 @@ function renderCampaignsTable(campaigns) {
 
 function renderCategoryChart(categoryData) {
     const chart = charts.categoryRevenue;
-    const topData = categoryData.slice(0, 15).reverse(); // Reverse for horizontal chart
+    const topData = categoryData.slice(0, 15);
     chart.data.labels = topData.map(d => d.name);
     chart.data.datasets[0].data = topData.map(d => d.totalRevenue);
     chart.update();
@@ -587,6 +588,7 @@ function renderUpsellPaths(paths) {
 function showChannelDetailsPopup(channelName, metricType) {
     let filteredTransactions = [];
     let title = '';
+
     const allTransactions = latestFilteredSalesRows.filter(row => row['ช่องทาง'] === channelName);
 
     switch (metricType) {
@@ -611,8 +613,8 @@ function showChannelDetailsPopup(channelName, metricType) {
             filteredTransactions = allTransactions.filter(row => (toNumber(row['P1']) + toNumber(row['ยอดอัพ P1']) + toNumber(row['ยอดอัพ P2'])) > 0);
             break;
         default:
-            title = `Details for ${channelName}`;
-            filteredTransactions = allTransactions;
+             title = `Details for ${channelName}`;
+             filteredTransactions = allTransactions;
     }
 
     ui.modalTitle.textContent = title;
@@ -627,11 +629,14 @@ function showChannelDetailsPopup(channelName, metricType) {
                 const p1 = toNumber(row['P1']);
                 const upP1 = toNumber(row['ยอดอัพ P1']);
                 const upP2 = toNumber(row['ยอดอัพ P2']);
+                
                 let billTypes = [];
                 if (p1 > 0) billTypes.push('P1');
                 if (upP1 > 0) billTypes.push('UP P1');
                 if (upP2 > 0) billTypes.push('UP P2');
                 if (row['P2']) billTypes.push('P2 Lead');
+
+
                 return `
                 <tr>
                     <td>${index + 1}</td>
@@ -744,14 +749,17 @@ function showCategoryDetailsPopup(categoryName, filterType = 'ALL') {
 
 function showUpsellPathDetails(pathKey) {
     const pathData = latestUpsellPaths.find(p => `${p.from} -> ${p.to}` === pathKey);
-    if (!pathData || !pathData.transactions) { return; }
+    if (!pathData || !pathData.transactions) {
+        console.error("Upsell path data not found for key:", pathKey);
+        return;
+    }
 
     const transactions = pathData.transactions;
     ui.modalTitle.textContent = `Upsell Details: ${pathKey}`;
     ui.adSearchInput.style.display = 'none';
 
     if (transactions.length === 0) {
-        ui.modalBody.innerHTML = '<p style="text-align:center; grid-column: 1 / -1;">No transaction details found.</p>';
+        ui.modalBody.innerHTML = '<p style="text-align:center; grid-column: 1 / -1;">No transaction details found for this path.</p>';
     } else {
         const tableRows = transactions
             .sort((a, b) => parseGvizDate(b['วันที่']) - parseGvizDate(a['วันที่']))
@@ -791,10 +799,6 @@ function sortAndRenderCampaigns() {
     const { key, direction } = currentSort;
     const searchTerm = ui.campaignSearchInput.value.toLowerCase();
     
-    if (!latestCampaignData) {
-        latestCampaignData = [];
-    }
-
     let filteredData = latestCampaignData.filter(campaign => 
         campaign.name.toLowerCase().includes(searchTerm)
     );
@@ -840,26 +844,24 @@ function renderPopupAds(ads) {
         ui.modalBody.innerHTML = `<p style="text-align: center; grid-column: 1 / -1;">No ads found for this campaign.</p>`;
     } else {
         ui.modalBody.innerHTML = ads
-            .sort((a,b) => (b.insights?.spend || 0) - (a.insights?.spend || 0))
-            .map(ad => {
-                const insights = ad.insights || { spend: 0, impressions: 0, purchases: 0, messaging_conversations: 0, cpm: 0 };
-                return `
-                <div class="ad-card">
-                    <div class="ad-card-image">
-                        <img src="${ad.thumbnail_url}" alt="Ad thumbnail" onerror="this.src='https://placehold.co/120x120/0d0c1d/a0a0b0?text=No+Image'">
-                    </div>
-                    <div class="ad-card-details">
-                        <h4>${ad.name}</h4>
-                        <div class="ad-card-stats">
-                            <div>Spend: <span>${formatCurrency(insights.spend)}</span></div>
-                            <div>Impressions: <span>${formatNumber(insights.impressions)}</span></div>
-                            <div>Purchases: <span>${formatNumber(insights.purchases)}</span></div>
-                            <div>Messaging: <span>${formatNumber(insights.messaging_conversations)}</span></div>
-                            <div>CPM: <span>${formatCurrency(insights.cpm)}</span></div>
-                        </div>
+            .sort((a,b) => b.insights.spend - a.insights.spend)
+            .map(ad => `
+            <div class="ad-card">
+                <div class="ad-card-image">
+                    <img src="${ad.thumbnail_url}" alt="Ad thumbnail" onerror="this.src='https://placehold.co/120x120/0d0c1d/a0a0b0?text=No+Image'">
+                </div>
+                <div class="ad-card-details">
+                    <h4>${ad.name}</h4>
+                    <div class="ad-card-stats">
+                        <div>Spend: <span>${formatCurrency(ad.insights.spend)}</span></div>
+                        <div>Impressions: <span>${formatNumber(ad.insights.impressions)}</span></div>
+                        <div>Purchases: <span>${formatNumber(ad.insights.purchases)}</span></div>
+                        <div>Messaging: <span>${formatNumber(ad.insights.messaging_conversations)}</span></div>
+                        <div>CPM: <span>${formatCurrency(ad.insights.cpm)}</span></div>
                     </div>
                 </div>
-            `}).join('');
+            </div>
+        `).join('');
     }
 }
 
@@ -896,13 +898,30 @@ function initializeCharts() {
 
     charts.categoryRevenue = new Chart(ui.categoryRevenueChart.getContext('2d'), {
         type: 'bar',
-        data: { labels: [], datasets: [{ label: 'Revenue (THB)', data: [], backgroundColor: categoryColors }] },
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Revenue (THB)',
+                data: [],
+                backgroundColor: categoryColors
+            }]
+        },
         options: {
-            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-            plugins: { legend: { display: false } },
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
             scales: {
-                x: { beginAtZero: true, ticks: { color: textColor, callback: v => '฿' + (v / 1000) + 'K' }, grid: { color: gridColor } },
-                y: { ticks: { color: textColor }, grid: { color: 'transparent' } }
+                x: {
+                    ticks: { color: textColor, autoSkip: false, maxRotation: 45, minRotation: 45 },
+                    grid: { color: 'transparent' }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: textColor, callback: v => '฿' + (v / 1000) + 'K' },
+                    grid: { color: gridColor }
+                }
             }
         }
     });
@@ -917,10 +936,6 @@ async function main() {
     try {
         const startDateStr = ui.startDate.value;
         const endDateStr = ui.endDate.value;
-         if (!startDateStr || !endDateStr) {
-            setDefaultDates();
-            return main(); // Re-run main after setting dates
-        }
         const isCompareMode = ui.compareToggle.checked;
         
         const fetchPromises = [
@@ -931,30 +946,24 @@ async function main() {
         if (isCompareMode) {
             const compareStartDateStr = ui.compareStartDate.value;
             const compareEndDateStr = ui.compareEndDate.value;
-            if (compareStartDateStr && compareEndDateStr) {
-                fetchPromises.push(fetchAdsData(compareStartDateStr, compareEndDateStr));
-            }
+            fetchPromises.push(fetchAdsData(compareStartDateStr, compareEndDateStr));
         }
         
         const results = await Promise.all(fetchPromises);
 
         const adsResponse = results[0];
         const allSalesRows = results[1];
-        const comparisonAdsResponse = results.length > 2 ? results[2] : null;
-
-         if (!adsResponse || !adsResponse.success) {
-             throw new Error(adsResponse.error || 'Unknown API error from main Ads fetch.');
-        }
+        const comparisonAdsResponse = isCompareMode ? results[2] : null;
 
         const currentStartDate = new Date(startDateStr + 'T00:00:00');
         const currentEndDate = new Date(endDateStr + 'T23:59:59');
         const salesData = processSalesDataForPeriod(allSalesRows, currentStartDate, currentEndDate);
         latestCategoryDetails = salesData.categoryDetails;
         latestUpsellPaths = salesData.upsellPaths;
-        latestFilteredSalesRows = salesData.filteredRows;
+        latestFilteredSalesRows = salesData.filteredRows; 
         
         let comparisonSalesData = null;
-        if (isCompareMode && comparisonAdsResponse && comparisonAdsResponse.success) {
+        if (isCompareMode && comparisonAdsResponse?.success) {
             const compareStartDate = new Date(ui.compareStartDate.value + 'T00:00:00');
             const compareEndDate = new Date(ui.compareEndDate.value + 'T23:59:59');
             comparisonSalesData = processSalesDataForPeriod(allSalesRows, compareStartDate, compareEndDate);
@@ -963,28 +972,31 @@ async function main() {
             latestComparisonData = null;
         }
         
-        latestCampaignData = adsResponse.data.campaigns || [];
-        
-        renderFunnelOverview(adsResponse.totals, salesData.summary, comparisonAdsResponse?.totals, comparisonSalesData);
-        renderAdsOverview(adsResponse.totals);
-        renderSalesOverview(salesData.summary, comparisonSalesData?.summary);
-        renderSalesRevenueBreakdown(salesData.summary, comparisonSalesData?.summary);
-        renderSalesBillStats(salesData.summary, comparisonSalesData?.summary);
-        
-        sortAndRenderCampaigns();
-        renderCategoryChart(salesData.categoryDetails);
-        renderCategoryDetailTable(salesData.categoryDetails);
-        renderChannelTable(salesData.channelBreakdown);
-        renderUpsellPaths(salesData.upsellPaths);
-        
-        if (adsResponse.data.dailySpend) {
-            charts.dailySpend.data.labels = adsResponse.data.dailySpend.map(d => `${new Date(d.date).getUTCDate()}/${new Date(d.date).getUTCMonth() + 1}`);
+        if (adsResponse.success) {
+            latestCampaignData = adsResponse.data.campaigns;
+            
+            renderFunnelOverview(adsResponse.totals, salesData.summary, comparisonAdsResponse?.totals, comparisonSalesData);
+            renderAdsOverview(adsResponse.totals);
+            renderSalesOverview(salesData.summary, comparisonSalesData?.summary);
+            renderSalesRevenueBreakdown(salesData.summary, comparisonSalesData?.summary);
+            renderSalesBillStats(salesData.summary, comparisonSalesData?.summary);
+            
+            sortAndRenderCampaigns();
+            renderCategoryChart(salesData.categoryDetails);
+            renderCategoryDetailTable(salesData.categoryDetails);
+            renderChannelTable(salesData.channelBreakdown);
+            renderUpsellPaths(salesData.upsellPaths);
+            
+            charts.dailySpend.data.labels = adsResponse.data.dailySpend.map(d => `${new Date(d.date).getDate()}/${new Date(d.date).getMonth() + 1}`);
             charts.dailySpend.data.datasets[0].data = adsResponse.data.dailySpend.map(d => d.spend);
             charts.dailySpend.update();
+
+        } else {
+            throw new Error(adsResponse.error || 'Unknown API error');
         }
 
     } catch (err) {
-        showError(`${err.message || 'An unexpected error occurred.'}`);
+        showError(`${err.message}`);
         console.error(err);
     } finally {
         ui.loading.classList.remove('show');
@@ -1009,22 +1021,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeCharts();
     initializeModal();
     setDefaultDates();
-    // A small delay to ensure date values are rendered before first main() call
-    setTimeout(main, 100);
+    main();
 
     ui.refreshBtn.addEventListener('click', main);
     const dateInputs = [ui.startDate, ui.endDate, ui.compareStartDate, ui.compareEndDate, ui.compareToggle];
-    dateInputs.forEach(input => input.addEventListener('change', () => {
-        if (ui.startDate.value && ui.endDate.value) {
-            // Debounce main call to prevent rapid firing
-            clearTimeout(window.dateChangeTimeout);
-            window.dateChangeTimeout = setTimeout(main, 300);
-        }
-    }));
+    dateInputs.forEach(input => input.addEventListener('change', main));
 
     ui.compareToggle.addEventListener('change', () => {
          ui.compareControls.classList.toggle('show', ui.compareToggle.checked);
-         main();
     });
 
     ui.campaignSearchInput.addEventListener('input', sortAndRenderCampaigns);
