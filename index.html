@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Online Choc - Dashboard</title>
+    <title> Online Sriracha </title>
+    
     <link rel="stylesheet" href="style.css" />
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -13,7 +16,7 @@
 <body>
     <div class="container">
         <div class="topbar glass-panel">
-            <h1>🚀 Online Choc </h1>
+            <h1>🚀 Online Sriracha </h1>
             <div class="controls">
                 <div class="control-row">
                     <label><strong>ช่วงเวลาปัจจุบัน:</strong></label>
@@ -27,13 +30,11 @@
                          <label>End: <input type="date" id="compareEndDate" /></label>
                     </div>
                 </div>
-                 <div class="control-row" style="justify-content: flex-end; gap: 10px;">
-                     <button class="btn" id="aiSummaryBtn" style="border-color: var(--neon-magenta); color: var(--neon-magenta); box-shadow: 0 0 8px rgba(255, 0, 242, 0.4);">✨ AI Summary</button>
+                 <div class="control-row" style="justify-content: flex-end;">
                      <button class="btn" id="refreshBtn">รีเฟรช / คำนวณ</button>
                  </div>
             </div>
         </div>
-
         <div class="error-message" id="errorMessage"></div>
         <div class="loading" id="loading">
             <div class="spinner"></div>
@@ -87,6 +88,7 @@
                 <div class="chart-wrapper-small"><canvas id="customerChart"></canvas></div>
             </div>
         </div>
+
         <div class="glass-panel top-categories-table">
             <h2 class="chart-title">📡 ตารางสรุปช่องทางการติดต่อ</h2>
             <table>
@@ -104,15 +106,20 @@
             </table>
         </div>
 
-        <div class="section-header" style="margin-top: 40px;"><h2>📊 Revenue by Category</h2></div>
+        <div class="section-header" style="margin-top: 40px;">
+            <h2>📊 Revenue by Category</h2>
+        </div>
         <div class="glass-panel">
             <div class="chart-wrapper-large">
                 <canvas id="categoryRevenueChart"></canvas>
             </div>
         </div>
+
         <div class="glass-panel top-categories-table scrollable-table" style="margin-top: 22px;">
             <h2 class="chart-title">📋 Detailed Category Performance</h2>
-            <p class="description">คลิกที่ตัวเลขเพื่อดูรายละเอียดธุรกรรมของแต่ละหมวดหมู่</p>
+            <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 20px;">
+                คลิกที่ตัวเลขเพื่อดูรายละเอียดธุรกรรมของแต่ละหมวดหมู่
+            </p>
             <table>
                 <thead>
                     <tr>
@@ -125,12 +132,16 @@
                         <th>Total Revenue</th>
                     </tr>
                 </thead>
-                <tbody id="categoryDetailTableBody"></tbody>
+                <tbody id="categoryDetailTableBody">
+                </tbody>
             </table>
         </div>
+        
         <div class="glass-panel top-categories-table scrollable-table">
             <h2 class="chart-title">🔁 P1 to UP P1 Upsell Flow Analysis</h2>
-            <p class="description">ตารางสรุปการอัปเกรดสินค้า</p>
+            <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 20px;">
+                ตารางนี้แสดงว่าลูกค้าที่ซื้อสินค้า/บริการในหมวดหมู่ P1 (From) ได้อัปเกรดไปซื้ออะไรต่อในหมวดหมู่ UP P1 (To) และสร้างรายได้เท่าไหร่จากการอัปเกรดนั้น
+            </p>
             <table>
                 <thead>
                     <tr>
@@ -145,6 +156,7 @@
                 <tbody id="upsellPathsTableBody"></tbody>
             </table>
         </div>
+
     </div>
 
     <div id="detailsModal" class="modal-overlay">
@@ -158,20 +170,6 @@
         </div>
     </div>
 
-    <div id="aiModal" class="modal-overlay">
-        <div class="modal-content glass-panel" style="max-width: 600px;">
-            <div class="modal-header">
-                <h2>✨ AI Insights Summary</h2>
-                <span class="modal-close-btn" id="aiModalClose">&times;</span>
-            </div>
-            <div id="aiModalBody" class="modal-body table-view" style="color: var(--text-primary); line-height: 1.6; font-size: 0.95rem;">
-                </div>
-            <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
-                <button class="btn" id="copyAiText">คัดลอกข้อความ</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
+    <script defer src="script.js"></script>
 </body>
 </html>
