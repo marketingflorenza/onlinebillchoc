@@ -2,8 +2,8 @@
 // 1. CONFIGURATION
 // ================================================================
 const CONFIG = {
-    API_BASE_URL: 'https://backend-api-sriracha.vercel.app/api',
-    SHEET_ID: '1PdYqXkrrRGIv-6cCgOn8VXE6MpQhMlBGpFw7BbfzFbI', // <<< NOTE: Please verify if this SHEET_ID is correct for Sriracha
+    API_BASE_URL: 'https://backend-api-choc88.vercel.app/api',
+    SHEET_ID: '1F2bTvP1ySUT1q6fzRPQu7UpKNW_ze8GtKkd2rmRUjkI',
     SHEET_NAME_SUMMARY: 'SUM',
 };
 
