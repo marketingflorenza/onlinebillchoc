@@ -46,7 +46,7 @@ let charts = {};
 let latestCampaignData = [];
 let latestCategoryDetails = [];
 let latestUpsellPaths = [];
-let latestFilteredSalesRows = []; // <-- เพิ่มตัวแปรนี้
+let latestFilteredSalesRows = [];
 let currentPopupAds = [];
 let currentSort = { key: 'spend', direction: 'desc' };
 let allSalesDataCache = [];
@@ -233,7 +233,6 @@ function calculateCategoryDetails(filteredRows) {
     return Object.values(categoryMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
 
-// vvvvvvvvvvvvvvvvvvvv  THIS FUNCTION IS MODIFIED  vvvvvvvvvvvvvvvvvvvv
 function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
     const filteredRows = allSalesRows.filter(row => {
         const d = parseGvizDate(row['วันที่']);
@@ -279,7 +278,6 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
         }
     });
 
-    // The calculation for totalCustomers has been changed as requested.
     summary.totalCustomers = summary.p1Bills + summary.upP2Bills;
     
     const linkedRows = linkP1AndUpP1(filteredRows);
@@ -287,7 +285,6 @@ function processSalesDataForPeriod(allSalesRows, startDate, endDate) {
     const categoryDetails = calculateCategoryDetails(filteredRows);
     return { summary, categoryDetails, filteredRows, channelBreakdown, upsellPaths };
 }
-// ^^^^^^^^^^^^^^^^^^^^  END OF MODIFIED FUNCTION  ^^^^^^^^^^^^^^^^^^^^
 
 // ================================================================
 // 7. RENDERING & POPUP FUNCTIONS
@@ -307,8 +304,8 @@ function renderFunnelOverview(adsTotals, salesSummary, comparisonAdsTotals = nul
         return `<div class="stat-card">
                     <div class="stat-number">
                        <span>${displayVal}</span>
-                       ${comparisonHtml}
                     </div>
+                    ${comparisonHtml}
                     <div class="stat-label">${label}</div>
                 </div>`;
     };
@@ -336,7 +333,7 @@ function renderFunnelOverview(adsTotals, salesSummary, comparisonAdsTotals = nul
 }
 
 function renderAdsOverview(totals) {
-    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number">${value}</div><div class="stat-label">${label}</div></div>`;
+    const createStatCard = (label, value) => `<div class="stat-card"><div class="stat-number"><span>${value}</span></div><div class="stat-label">${label}</div></div>`;
     ui.adsStatsGrid.innerHTML = [
         createStatCard('Impressions', formatNumber(totals.impressions)),
         createStatCard('Messaging Started', formatNumber(totals.messaging_conversations)),
@@ -360,8 +357,8 @@ function renderSalesOverview(summary, comparisonSummary = null) {
         return `<div class="stat-card">
                     <div class="stat-number">
                        <span>${displayVal}</span>
-                       ${comparisonHtml}
                     </div>
+                    ${comparisonHtml}
                     <div class="stat-label">${label}</div>
                 </div>`;
     };
@@ -389,8 +386,8 @@ function renderSalesRevenueBreakdown(summary, comparisonSummary = null) {
         return `<div class="stat-card">
                     <div class="stat-number">
                        <span>${displayVal}</span>
-                       ${comparisonHtml}
                     </div>
+                    ${comparisonHtml}
                     <div class="stat-label">${label}</div>
                 </div>`;
     };
@@ -420,8 +417,8 @@ function renderSalesBillStats(summary, comparisonSummary = null) {
          return `<div class="stat-card">
                     <div class="stat-number">
                        <span>${displayVal}</span>
-                       ${comparisonHtml}
                     </div>
+                    ${comparisonHtml}
                     <div class="stat-label">${label}</div>
                 </div>`;
     };
@@ -518,7 +515,7 @@ function renderCampaignsTable(campaigns) {
         const insights = c.insights || {};
         return `
             <tr>
-                <td><a href="#" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
+                <td><a href="#" class="clickable-cell" onclick="showAdDetails('${c.id}'); return false;"><strong>${c.name || 'N/A'}</strong></a></td>
                 <td><span style="color:${c.status === 'ACTIVE' ? 'var(--color-positive)' : 'var(--text-secondary)'}">${c.status || 'N/A'}</span></td>
                 <td class="revenue-cell">${formatCurrency(insights.spend)}</td>
                 <td>${formatNumber(insights.impressions)}</td>
@@ -878,21 +875,31 @@ function initializeModal() {
 
 function initializeCharts() {
     const textColor = '#e0e0e0';
-    const gridColor = 'rgba(224, 224, 224, 0.1)';
-    const categoryColors = ['#3B82F6', '#EC4899', '#84CC16', '#F59E0B', '#10B981', '#6366F1', '#D946EF', '#F97316', '#06B6D4', '#EAB308'].map(c => c + 'CC');
+    const gridColor = 'rgba(0, 242, 254, 0.1)';
+    const categoryColors = [
+        '#00f2fe', '#4facfe', '#34d399', '#ff00f2', 
+        '#ff4757', '#ffa502', '#2ed573', '#7bed9f',
+        '#1e90ff', '#5352ed'
+    ];
     
-    charts.dailySpend = new Chart(document.getElementById('dailySpendChart').getContext('2d'), {
-        type: 'line', data: { labels: [], datasets: [{ label: 'Spend (THB)', data: [], borderColor: '#00f2fe', backgroundColor: 'rgba(0, 242, 254, 0.1)', fill: true, tension: 0.3 }] },
+    // Gradient for Daily Spend
+    const ctx = document.getElementById('dailySpendChart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, 'rgba(0, 242, 254, 0.4)');
+    gradient.addColorStop(1, 'rgba(0, 242, 254, 0.05)');
+
+    charts.dailySpend = new Chart(ctx, {
+        type: 'line', data: { labels: [], datasets: [{ label: 'Spend (THB)', data: [], borderColor: '#00f2fe', backgroundColor: gradient, borderWidth: 2, pointBackgroundColor: '#fff', fill: true, tension: 0.4 }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: textColor }, grid: { color: gridColor } }, y: { beginAtZero: true, ticks: { color: textColor, callback: v => '฿' + v.toLocaleString() }, grid: { color: gridColor } } } }
     });
 
     charts.revenue = new Chart(document.getElementById('revenueChart').getContext('2d'), {
-        type: 'bar', data: { labels: ['P1', 'UP P1', 'UP P2'], datasets: [{ label: 'Sales (THB)', data: [], backgroundColor: ['#3B82F6', '#EC4899', '#84CC16'] }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor } }, x: { ticks: { color: textColor }, grid: { color: 'transparent' } } } }
+        type: 'bar', data: { labels: ['P1', 'UP P1', 'UP P2'], datasets: [{ label: 'Sales (THB)', data: [], backgroundColor: ['#00f2fe', '#ff00f2', '#34d399'], borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor } }, x: { ticks: { color: textColor }, grid: { display: false } } } }
     });
 
     charts.customer = new Chart(document.getElementById('customerChart').getContext('2d'), {
-        type: 'doughnut', data: { labels:['New Customers','Old Customers'], datasets:[{ data:[], backgroundColor: ['#F59E0B', '#10B981'], borderColor: '#0d0c1d' }] },
+        type: 'doughnut', data: { labels:['New Customers','Old Customers'], datasets:[{ data:[], backgroundColor: ['#ffa502', '#2ed573'], borderColor: '#0d0c1d', borderWidth: 2 }] },
         options: { responsive:true, maintainAspectRatio:false, plugins: { legend: { position: 'right', labels: { color: textColor } } } }
     });
 
@@ -903,7 +910,8 @@ function initializeCharts() {
             datasets: [{
                 label: 'Revenue (THB)',
                 data: [],
-                backgroundColor: categoryColors
+                backgroundColor: categoryColors,
+                borderRadius: 4
             }]
         },
         options: {
@@ -915,7 +923,7 @@ function initializeCharts() {
             scales: {
                 x: {
                     ticks: { color: textColor, autoSkip: false, maxRotation: 45, minRotation: 45 },
-                    grid: { color: 'transparent' }
+                    grid: { display: false }
                 },
                 y: {
                     beginAtZero: true,
