@@ -183,12 +183,16 @@ function processSalesData(rows, startDate, endDate) {
 function renderFunnel(adsTotals) {
     const spend = adsTotals.spend || 0;
     const rev = latestSalesAnalysis.summary.totalRevenue || 0;
+    const purchases = adsTotals.purchases || 0; 
+    
     const roas = spend > 0 ? rev / spend : 0;
+    const cac = purchases > 0 ? spend / purchases : 0;
     
     document.getElementById('funnelStatsGrid').innerHTML = `
         <div class="stat-card"><div class="stat-number">${formatCurrency(spend)}</div><div class="stat-label">Ad Spend</div></div>
         <div class="stat-card"><div class="stat-number">${formatCurrency(rev)}</div><div class="stat-label">Total Revenue</div></div>
         <div class="stat-card"><div class="stat-number">${roas.toFixed(2)}x</div><div class="stat-label">ROAS</div></div>
+        <div class="stat-card"><div class="stat-number">${formatCurrency(cac)}</div><div class="stat-label">CAC</div></div>
     `;
 }
 
@@ -298,9 +302,10 @@ function renderSalesStats(data) {
         </div>
     `;
 
+    // --- ตาราง Channel (คลิกได้) ---
     const sortedChannels = Object.entries(data.channels).sort((a,b) => b[1].revenue - a[1].revenue);
     document.getElementById('channelTableBody').innerHTML = sortedChannels.map(([name, val]) => `
-        <tr>
+        <tr class="clickable-row" onclick="showChannelDetails('${name.replace(/'/g, "\\'")}')">
             <td><strong>${name}</strong></td>
             <td>${formatNumber(val.p1)}</td>
             <td>${formatNumber(val.p2)}</td>
@@ -437,6 +442,47 @@ function showCategoryDetails(categoryName) {
     ui.modal.classList.add('show');
 }
 
+// --- ฟังก์ชันสำหรับ Popup ช่องทางการติดต่อ ---
+function showChannelDetails(channelName) {
+    const C = CONFIG.COLUMN_NAMES;
+    const filtered = latestSalesAnalysis.filteredRows.filter(r => (r[C.CHANNEL] || 'ไม่ระบุ') === channelName);
+
+    const groups = {
+        p1: filtered.filter(r => toNumber(r[C.P1]) > 0 && toNumber(r[C.UP_P1]) === 0),
+        p2: filtered.filter(r => r[C.P2] && String(r[C.P2]).trim() !== ''),
+        upP2: filtered.filter(r => toNumber(r[C.UP_P2]) > 0)
+    };
+
+    ui.modalTitle.textContent = `ช่องทาง: ${channelName}`;
+    let html = '';
+
+    if (groups.p1.length > 0) {
+        html += `<div class="type-section"><div class="type-title">📦 P1 Bills (ลูกค้าใหม่/ซื้อทันที) <span class="type-badge">${groups.p1.length}</span></div>
+        <div class="scrollable-table"><table><thead><tr><th>Date</th><th>Customer</th><th>Tel</th><th>Interest</th><th>Revenue</th></tr></thead><tbody>
+        ${groups.p1.map(r => `<tr><td>${formatDate(parseGvizDate(r[C.DATE]))}</td><td>${r[C.CUSTOMER] || '-'}</td><td>${r[C.PHONE] || '-'}</td><td><small>${r[C.INTEREST] || '-'}</small></td><td class="revenue-cell">${formatCurrency(toNumber(r[C.P1]))}</td></tr>`).join('')}
+        </tbody></table></div></div>`;
+    }
+
+    if (groups.p2.length > 0) {
+        html += `<div class="type-section"><div class="type-title">📋 P2 Leads (รายชื่อสนใจ) <span class="type-badge">${groups.p2.length}</span></div>
+        <div class="scrollable-table"><table><thead><tr><th>Date</th><th>Customer</th><th>Tel</th><th>Interest</th></tr></thead><tbody>
+        ${groups.p2.map(r => `<tr><td>${formatDate(parseGvizDate(r[C.DATE]))}</td><td>${r[C.CUSTOMER] || '-'}</td><td>${r[C.PHONE] || '-'}</td><td><small>${r[C.P2] || '-'}</small></td></tr>`).join('')}
+        </tbody></table></div></div>`;
+    }
+
+    if (groups.upP2.length > 0) {
+        html += `<div class="type-section"><div class="type-title">💎 UP P2 Bills (ปิดการขายจาก Lead) <span class="type-badge">${groups.upP2.length}</span></div>
+        <div class="scrollable-table"><table><thead><tr><th>Date</th><th>Customer</th><th>Tel</th><th>Interest</th><th>Revenue</th></tr></thead><tbody>
+        ${groups.upP2.map(r => `<tr><td>${formatDate(parseGvizDate(r[C.DATE]))}</td><td>${r[C.CUSTOMER] || '-'}</td><td>${r[C.PHONE] || '-'}</td><td><small>${r[C.INTEREST] || '-'}</small></td><td class="revenue-cell">${formatCurrency(toNumber(r[C.UP_P2]))}</td></tr>`).join('')}
+        </tbody></table></div></div>`;
+    }
+
+    if (html === '') html = '<p style="text-align:center; padding: 20px;">No transaction details found for this channel.</p>';
+    ui.modalBody.innerHTML = html;
+    ui.modal.classList.add('show');
+}
+
+// --- Popup รายละเอียดโฆษณา (มี Messaging) ---
 function showAdDetails(campaignId) {
     const campaign = latestCampaignData.find(c => c.id === campaignId);
     if (!campaign) return;
@@ -447,12 +493,25 @@ function showAdDetails(campaignId) {
         ui.modalBody.innerHTML = '<p style="text-align:center;">No ads found.</p>';
     } else {
         ui.modalBody.innerHTML = ads.sort((a,b) => b.insights.spend - a.insights.spend).map(ad => `
-            <div class="ad-card"><img src="${ad.thumbnail_url}" onerror="this.src='https://placehold.co/80x80?text=No+Img'"><div style="flex:1;"><h4>${ad.name}</h4><div style="font-size:0.9em; color:#a0a0b0; display:grid; grid-template-columns: 1fr 1fr; margin-top:5px;"><div>Spend: <span style="color:white;">${formatCurrency(ad.insights.spend)}</span></div><div>Purchases: <span style="color:white;">${formatNumber(ad.insights.purchases)}</span></div><div>Impressions: <span style="color:white;">${formatNumber(ad.insights.impressions)}</span></div><div>CPM: <span style="color:white;">${formatCurrency(ad.insights.cpm)}</span></div></div></div></div>
+            <div class="ad-card">
+                <img src="${ad.thumbnail_url}" onerror="this.src='https://placehold.co/80x80?text=No+Img'">
+                <div style="flex:1;">
+                    <h4>${ad.name}</h4>
+                    <div style="font-size:0.9em; color:#a0a0b0; display:grid; grid-template-columns: 1fr 1fr; margin-top:5px;">
+                        <div>Spend: <span style="color:white;">${formatCurrency(ad.insights.spend)}</span></div>
+                        <div>Purchases: <span style="color:white;">${formatNumber(ad.insights.purchases)}</span></div>
+                        <div>Messaging: <span style="color:white;">${formatNumber(ad.insights.messaging_conversations)}</span></div>
+                        <div>Impressions: <span style="color:white;">${formatNumber(ad.insights.impressions)}</span></div>
+                        <div>CPM: <span style="color:white;">${formatCurrency(ad.insights.cpm)}</span></div>
+                    </div>
+                </div>
+            </div>
         `).join('');
     }
     ui.modal.classList.add('show');
 }
 
+// --- ส่วนที่แก้ไข: เพิ่มจำนวนบิล P1, UP P1, P2 Lead, UP P2 เข้าไปใน Prompt ---
 function generateGeminiPrompt() {
     const s = latestSalesAnalysis.summary;
     const ads = latestAdsTotals || {};
@@ -484,9 +543,10 @@ function generateGeminiPrompt() {
     p += `--- [ข้อมูลช่วงเวลาปัจจุบัน] ---\n`;
     p += `* ยอดขายรวม: ${f(s.totalRevenue)}\n`;
     p += `* จำนวนบิลทั้งหมด: ${num(s.totalBills)} บิล\n`;
-    p += `* ยอดขาย P1: ${f(s.p1Revenue)}\n`;
-    p += `* ยอดขาย UP P1: ${f(s.upp1Revenue)}\n`;
-    p += `* ยอดขาย UP P2: ${f(s.upp2Revenue)}\n\n`;
+    p += `* P1: ${f(s.p1Revenue)} (${num(s.p1Bills)} บิล)\n`;
+    p += `* UP P1: ${f(s.upp1Revenue)} (${num(s.upp1Bills)} บิล)\n`;
+    p += `* P2 Leads: ${num(s.p2Leads)} Leads\n`;
+    p += `* UP P2: ${f(s.upp2Revenue)} (${num(s.upp2Bills)} บิล)\n\n`;
 
     p += `* 5 หมวดหมู่ที่ทำรายได้สูงสุด:\n` + getTop5('total').map(c => `  - ${c.name}: ${f(c.total)}`).join('\n') + `\n`;
     p += `* 5 หมวดหมู่ P1 ที่ได้รายได้สูงสุด:\n` + getTop5('p1Val').map(c => `  - ${c.name}: ${f(c.p1Val)}`).join('\n') + `\n`;
