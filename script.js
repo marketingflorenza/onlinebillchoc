@@ -263,7 +263,7 @@ function renderSalesStats(data) {
         <div class="stat-card"><div class="stat-number">${formatNumber(data.summary.totalCustomers)}</div><div class="stat-label">Total Customers</div></div>
     `;
 
-    // --- ส่วนที่เพิ่ม: คำนวณอัตราความสำเร็จ ---
+    // --- ส่วนคำนวณ Conversion Rate (P1 -> UP P1 และ P2 -> UP P2) ---
     const p1ToUpP1Rate = data.summary.p1Bills > 0 
         ? ((data.summary.upp1Bills / data.summary.p1Bills) * 100).toFixed(2) 
         : "0.00";
@@ -280,19 +280,25 @@ function renderSalesStats(data) {
             <div class="stat-card"><div class="stat-number" style="color:#f59e0b">${formatCurrency(data.summary.upp2Revenue)}</div><div class="stat-label">UP P2 Revenue</div></div>
         </div>
         
-        <div style="margin-bottom: 10px; margin-top: 20px; color: var(--neon-cyan); font-weight: 600;">จำนวนบิลและอัตราความสำเร็จ (Bills & Success Rate)</div>
-        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
-            <div class="stat-card"><div class="stat-number">${formatNumber(data.summary.p1Bills)}</div><div class="stat-label">P1 Bills</div></div>
-            <div class="stat-card"><div class="stat-number">${formatNumber(data.summary.upp1Bills)}</div><div class="stat-label">UP P1 Bills</div></div>
-            <div class="stat-card" style="border: 1px solid #ec4899; background: rgba(236, 72, 153, 0.05);">
+        <div style="margin-bottom: 10px; margin-top: 20px; color: var(--neon-cyan); font-weight: 600;">วิเคราะห์อัตราส่วนการอัพเกรด (Success Rate)</div>
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+            <div class="stat-card" style="border-left: 4px solid #ec4899;">
                 <div class="stat-number" style="color:#ec4899">${p1ToUpP1Rate}%</div>
-                <div class="stat-label">P1 ➔ UP P1</div>
+                <div class="stat-label">P1 ➔ UP P1 Rate</div>
+                <div style="font-size: 0.8em; color: var(--text-secondary); margin-top: 4px;">
+                    (${formatNumber(data.summary.upp1Bills)} จาก ${formatNumber(data.summary.p1Bills)} บิล)
+                </div>
             </div>
-            <div class="stat-card"><div class="stat-number">${formatNumber(data.summary.p2Leads)}</div><div class="stat-label">P2 Leads</div></div>
-            <div class="stat-card"><div class="stat-number">${formatNumber(data.summary.upp2Bills)}</div><div class="stat-label">UP P2 Bills</div></div>
-            <div class="stat-card" style="border: 1px solid #f59e0b; background: rgba(245, 158, 11, 0.05);">
+            <div class="stat-card" style="border-left: 4px solid #f59e0b;">
                 <div class="stat-number" style="color:#f59e0b">${p2ToUpP2Rate}%</div>
-                <div class="stat-label">P2 ➔ UP P2</div>
+                <div class="stat-label">P2 ➔ UP P2 Rate</div>
+                <div style="font-size: 0.8em; color: var(--text-secondary); margin-top: 4px;">
+                    (${formatNumber(data.summary.upp2Bills)} จาก ${formatNumber(data.summary.p2Leads)} Leads)
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color:#00f2fe">${formatNumber(data.summary.newCustomers)}</div>
+                <div class="stat-label">New Customers</div>
             </div>
         </div>
     `;
