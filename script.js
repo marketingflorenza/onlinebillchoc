@@ -180,19 +180,46 @@ function processSalesData(rows, startDate, endDate) {
 // ================================================================
 // 6. RENDERING FUNCTIONS
 // ================================================================
+
 function renderFunnel(adsTotals) {
     const spend = adsTotals.spend || 0;
     const rev = latestSalesAnalysis.summary.totalRevenue || 0;
-    const purchases = adsTotals.purchases || 0; 
+    const totalBills = latestSalesAnalysis.summary.totalBills || 0;
+    const totalCustomers = latestSalesAnalysis.summary.totalCustomers || 0;
+    const messaging = adsTotals.messaging_conversations || 0;
     
     const roas = spend > 0 ? rev / spend : 0;
-    const cac = purchases > 0 ? spend / purchases : 0;
+    const cpl = totalBills > 0 ? spend / totalBills : 0;
+    const costPerHead = totalCustomers > 0 ? spend / totalCustomers : 0;
+    
+    const contentEfficiency = messaging > 0 ? ((totalBills / messaging) * 100).toFixed(2) : "0.00";
+    const bookingToClose = totalBills > 0 ? ((totalCustomers / totalBills) * 100).toFixed(2) : "0.00";
     
     document.getElementById('funnelStatsGrid').innerHTML = `
-        <div class="stat-card"><div class="stat-number">${formatCurrency(spend)}</div><div class="stat-label">Ad Spend</div></div>
-        <div class="stat-card"><div class="stat-number">${formatCurrency(rev)}</div><div class="stat-label">Total Revenue</div></div>
-        <div class="stat-card"><div class="stat-number">${roas.toFixed(2)}x</div><div class="stat-label">ROAS</div></div>
-        <div class="stat-card"><div class="stat-number">${formatCurrency(cac)}</div><div class="stat-label">CAC</div></div>
+        <div class="stat-card">
+            <div class="stat-number">${formatCurrency(spend)}</div>
+            <div class="stat-label">Ad Spend</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">${formatCurrency(rev)}</div>
+            <div class="stat-label">Total Revenue</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">${roas.toFixed(2)}x</div>
+            <div class="stat-label">ROAS</div>
+        </div>
+        <div class="stat-card" style="border: 1px solid var(--neon-cyan); background: rgba(0, 242, 254, 0.05);">
+            <div class="stat-number" style="color: var(--neon-cyan);">${formatCurrency(cpl)}</div>
+            <div class="stat-label">Cost per Booking</div>
+        </div>
+        <div class="stat-card" style="border: 1px solid #ff00f2; background: rgba(255, 0, 242, 0.05);">
+            <div class="stat-number" style="color: #ff00f2;">${formatCurrency(costPerHead)}</div>
+            <div class="stat-label">Cost per Head</div>
+        </div>
+        <div class="stat-card" style="border: 1px solid #f59e0b; background: rgba(245, 158, 11, 0.05);">
+            <div class="stat-number" style="color: #f59e0b;">${bookingToClose}%</div>
+            <div class="stat-label">Booking → Close</div>
+        </div>
     `;
 }
 
@@ -267,7 +294,6 @@ function renderSalesStats(data) {
         <div class="stat-card"><div class="stat-number">${formatNumber(data.summary.totalCustomers)}</div><div class="stat-label">Total Customers</div></div>
     `;
 
-    // --- ส่วนคำนวณ Success Rate ---
     const p1ToUpP1Rate = data.summary.p1Bills > 0 
         ? ((data.summary.upp1Bills / data.summary.p1Bills) * 100).toFixed(2) 
         : "0.00";
@@ -302,7 +328,6 @@ function renderSalesStats(data) {
         </div>
     `;
 
-    // --- ตาราง Channel (คลิกได้) ---
     const sortedChannels = Object.entries(data.channels).sort((a,b) => b[1].revenue - a[1].revenue);
     document.getElementById('channelTableBody').innerHTML = sortedChannels.map(([name, val]) => `
         <tr class="clickable-row" onclick="showChannelDetails('${name.replace(/'/g, "\\'")}')">
@@ -442,7 +467,6 @@ function showCategoryDetails(categoryName) {
     ui.modal.classList.add('show');
 }
 
-// --- ฟังก์ชันสำหรับ Popup ช่องทางการติดต่อ ---
 function showChannelDetails(channelName) {
     const C = CONFIG.COLUMN_NAMES;
     const filtered = latestSalesAnalysis.filteredRows.filter(r => (r[C.CHANNEL] || 'ไม่ระบุ') === channelName);
@@ -482,7 +506,6 @@ function showChannelDetails(channelName) {
     ui.modal.classList.add('show');
 }
 
-// --- Popup รายละเอียดโฆษณา (มี Messaging) ---
 function showAdDetails(campaignId) {
     const campaign = latestCampaignData.find(c => c.id === campaignId);
     if (!campaign) return;
@@ -511,7 +534,33 @@ function showAdDetails(campaignId) {
     ui.modal.classList.add('show');
 }
 
-// --- ส่วนที่แก้ไข: เพิ่มจำนวนบิล P1, UP P1, P2 Lead, UP P2 เข้าไปใน Prompt ---
+// ================================================================
+// 8. GEMINI PROMPT GENERATION (PRO VERSION WITH COMPARE & ALL TOP 5)
+// ================================================================
+
+function getCompareData() {
+    const start = new Date(ui.startDate.value);
+    const end = new Date(ui.endDate.value);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    const prevEnd = new Date(start);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - diffDays + 1);
+
+    const prevData = processSalesData(
+        allSalesDataCache, 
+        prevStart.toISOString().split('T')[0], 
+        prevEnd.toISOString().split('T')[0]
+    );
+
+    return {
+        period: `${formatDate(prevStart)} - ${formatDate(prevEnd)}`,
+        data: prevData
+    };
+}
+
 function generateGeminiPrompt() {
     const s = latestSalesAnalysis.summary;
     const ads = latestAdsTotals || {};
@@ -519,45 +568,77 @@ function generateGeminiPrompt() {
     const num = (n) => formatNumber(n);
     const branchName = document.querySelector('h1').innerText.split(':')[0].trim();
 
-    // Calculate ROAS
     const spend = ads.spend || 0;
     const rev = s.totalRevenue || 0;
+    const messaging = ads.messaging_conversations || 0;
     const roas = spend > 0 ? (rev / spend).toFixed(2) + 'x' : '0x';
+    const cpb = s.totalBills > 0 ? (spend / s.totalBills) : 0;
+    const cph = s.totalCustomers > 0 ? (spend / s.totalCustomers) : 0;
+    const bookingClose = s.totalBills > 0 ? ((s.totalCustomers / s.totalBills) * 100).toFixed(2) : 0;
+    
+    const p1ToUpP1Rate = s.p1Bills > 0 ? ((s.upp1Bills / s.p1Bills) * 100).toFixed(2) : "0.00";
+    const p2ToUpP2Rate = s.p2Leads > 0 ? ((s.upp2Bills / s.p2Leads) * 100).toFixed(2) : "0.00";
 
-    // Top 5 Helpers
+    const compare = getCompareData();
+    const ps = compare.data.summary;
+
+    const calcDiff = (curr, prev) => {
+        const diff = curr - prev;
+        const pct = prev > 0 ? ((diff / prev) * 100).toFixed(2) : "N/A";
+        const sign = diff >= 0 ? "+" : "";
+        return `${sign}${num(diff)} (${sign}${pct}%)`;
+    };
+
+    const calcDiffCurr = (curr, prev) => {
+        const diff = curr - prev;
+        const pct = prev > 0 ? ((diff / prev) * 100).toFixed(2) : "N/A";
+        const sign = diff >= 0 ? "+" : "";
+        return `${sign}${f(diff)} (${sign}${pct}%)`;
+    };
+
     const cats = latestSalesAnalysis.categories;
     const getTop5 = (sortKey) => [...cats].sort((a,b) => b[sortKey] - a[sortKey]).slice(0, 5);
 
-    let p = `--- [บริบทของการวิเคราะห์] ---\n`;
+    let p = `--- [บริบทและการวิเคราะห์เปรียบเทียบ] ---\n`;
     p += `* สาขา: ${branchName}\n`;
-    p += `* ช่วงเวลา: ${formatDate(new Date(ui.startDate.value))} ถึง ${formatDate(new Date(ui.endDate.value))}\n\n`;
+    p += `* ช่วงเวลาปัจจุบัน: ${formatDate(new Date(ui.startDate.value))} ถึง ${formatDate(new Date(ui.endDate.value))}\n`;
+    p += `* ช่วงเวลาที่นำมาเทียบ: ${compare.period}\n\n`;
 
-    p += `--- [ข้อมูล Ads] ---\n`;
+    p += `--- [ข้อมูล Ads & Funnel (ปัจจุบัน)] ---\n`;
     p += `Ad Spend: ${f(spend)}\n`;
     p += `ROAS: ${roas}\n`;
-    p += `Impressions: ${num(ads.impressions)}\n`;
-    p += `Messaging: ${num(ads.messaging_conversations)}\n`;
-    p += `CPM: ${f(ads.cpm)}\n`;
-    p += `Ads Purchases: ${num(ads.purchases)}\n\n`;
+    p += `Messaging: ${num(messaging)}\n`;
+    p += `Cost Per Booking: ${f(cpb)}\n`;
+    p += `Cost Per Head: ${f(cph)}\n`;
+    p += `Booking → Close (Customers/Bills): ${bookingClose}%\n\n`;
 
-    p += `--- [ข้อมูลช่วงเวลาปัจจุบัน] ---\n`;
-    p += `* ยอดขายรวม: ${f(s.totalRevenue)}\n`;
-    p += `* จำนวนบิลทั้งหมด: ${num(s.totalBills)} บิล\n`;
-    p += `* P1: ${f(s.p1Revenue)} (${num(s.p1Bills)} บิล)\n`;
-    p += `* UP P1: ${f(s.upp1Revenue)} (${num(s.upp1Bills)} บิล)\n`;
-    p += `* P2 Leads: ${num(s.p2Leads)} Leads\n`;
-    p += `* UP P2: ${f(s.upp2Revenue)} (${num(s.upp2Bills)} บิล)\n\n`;
+    p += `--- [เปรียบเทียบตัวเลขที่เปลี่ยนแปลง (Performance Compare)] ---\n`;
+    p += `1. ยอดขายรวม: ${calcDiffCurr(s.totalRevenue, ps.totalRevenue)}\n`;
+    p += `2. จำนวนบิล: ${calcDiff(s.totalBills, ps.totalBills)}\n`;
+    p += `3. จำนวนลูกค้า: ${calcDiff(s.totalCustomers, ps.totalCustomers)}\n`;
+    p += `4. P1 Revenue: ${calcDiffCurr(s.p1Revenue, ps.p1Revenue)}\n`;
+    p += `5. UP P1 Revenue: ${calcDiffCurr(s.upp1Revenue, ps.upp1Revenue)}\n`;
+    p += `6. UP P2 Revenue: ${calcDiffCurr(s.upp2Revenue, ps.upp2Revenue)}\n\n`;
 
-    p += `* 5 หมวดหมู่ที่ทำรายได้สูงสุด:\n` + getTop5('total').map(c => `  - ${c.name}: ${f(c.total)}`).join('\n') + `\n`;
-    p += `* 5 หมวดหมู่ P1 ที่ได้รายได้สูงสุด:\n` + getTop5('p1Val').map(c => `  - ${c.name}: ${f(c.p1Val)}`).join('\n') + `\n`;
-    p += `* 5 หมวดหมู่ UP P1 ที่ได้รายได้สูงสุด:\n` + getTop5('up1Val').map(c => `  - ${c.name}: ${f(c.up1Val)}`).join('\n') + `\n`;
-    p += `* 5 หมวดหมู่ UP P2 ที่ได้รายได้สูงสุด:\n` + getTop5('up2Val').map(c => `  - ${c.name}: ${f(c.up2Val)}`).join('\n') + `\n\n`;
+    p += `--- [ข้อมูลช่วงเวลาปัจจุบัน (รายละเอียด)] ---\n`;
+    p += `* P1 ➔ UP P1 Rate: ${p1ToUpP1Rate}%\n`;
+    p += `* P2 ➔ UP P2 Rate: ${p2ToUpP2Rate}%\n`;
+    p += `* ยอดขาย P1: ${f(s.p1Revenue)} (${num(s.p1Bills)} บิล)\n`;
+    p += `* ยอดอัพ P1: ${f(s.upp1Revenue)} (${num(s.upp1Bills)} บิล)\n`;
+    p += `* ยอดอัพ P2: ${f(s.upp2Revenue)} (${num(s.upp2Bills)} บิล)\n`;
+    p += `* P2 Leads: ${num(s.p2Leads)} Leads\n\n`;
 
-    p += `--- [สรุปประสิทธิภาพตามช่องทาง] ---\n`;
-    p += `จำนวนบิลแต่ละประเภทยอด\n`;
+    p += `* 5 หมวดหมู่รายได้รวมสูงสุด:\n` + getTop5('total').map(c => `  - ${c.name}: ${f(c.total)}`).join('\n') + `\n\n`;
+    p += `* 5 หมวดหมู่ P1 ขายดี (บิลเยอะสุด):\n` + getTop5('p1B').map(c => `  - ${c.name}: ${num(c.p1B)} บิล`).join('\n') + `\n\n`;
+    p += `* 5 หมวดหมู่ UP P1 ขายดี (บิลเยอะสุด):\n` + getTop5('up1B').map(c => `  - ${c.name}: ${num(c.up1B)} บิล`).join('\n') + `\n\n`;
+    p += `* 5 หมวดหมู่ UP P2 ขายดี (บิลเยอะสุด):\n` + getTop5('up2B').map(c => `  - ${c.name}: ${num(c.up2B)} บิล`).join('\n') + `\n\n`;
+
+    p += `--- [วิเคราะห์ตามช่องทาง] ---\n`;
     Object.entries(latestSalesAnalysis.channels).sort((a,b) => b[1].revenue - a[1].revenue).forEach(([name, val]) => {
         p += `* ${name}: บิล P1 ${val.p1}, UP P2 ${val.upP2}, ยอดขายรวม ${f(val.revenue)}\n`;
     });
+
+    p += `\nกรุณาวิเคราะห์จุดที่ "ตัวเลขหายไป" หรือลดลงอย่างมีนัยสำคัญ และแนะนำแนวทางแก้ไขให้ด้วยครับ โดยเน้นที่การเปรียบเทียบหมวดหมู่สินค้าที่ยอดลดลงครับ`;
 
     return p;
 }
@@ -614,11 +695,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     ui.geminiBtn.addEventListener('click', () => {
         const prompt = generateGeminiPrompt();
-        ui.modalTitle.textContent = '🤖 Prompt สำหรับ Gemini';
+        ui.modalTitle.textContent = '🤖 Prompt วิเคราะห์เปรียบเทียบสำหรับ Gemini';
         ui.modalBody.innerHTML = `
-            <textarea readonly onclick="this.select()">${prompt}</textarea>
+            <textarea readonly onclick="this.select()" style="width:100%; min-height:400px; padding:10px; background:#1a1a2e; color:#00f2fe; border:1px solid #333; font-family:monospace;">${prompt}</textarea>
             <div style="text-align:center; margin-top:10px;">
-                <p style="font-size:0.9em; color:#a0a0b0;">Copy ข้อความด้านบนแล้วนำไปวางใน Google Gemini</p>
+                <p style="font-size:0.9em; color:#a0a0b0;">Copy ข้อความด้านบนแล้วนำไปวางใน Google Gemini เพื่อวิเคราะห์ตัวเลขที่หายไปและเปรียบเทียบเป็น %</p>
             </div>`;
         ui.modal.classList.add('show');
     });
