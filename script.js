@@ -136,18 +136,19 @@ function processSalesData(rows, startDate, endDate) {
         const custPhone = String(row[C.PHONE] || '').trim();
         const custKey = `${custName}|${custPhone}`;
 
+        // เก็บข้อมูลเบื้องต้น
+        if (p1 > 0) summary.p1Bills++;
+        if (up1 > 0) summary.upp1Bills++;
+        if (up2 > 0) summary.upp2Bills++;
+        if (p2Str !== '') summary.p2Leads++;
+
         if (hasRevenue || p2Str !== '') {
             summary.totalRevenue += rev;
             summary.p1Revenue += p1;
             summary.upp1Revenue += up1;
             summary.upp2Revenue += up2;
             
-            if (p1 > 0) summary.p1Bills++;
-            if (up1 > 0) summary.upp1Bills++;
-            if (up2 > 0) summary.upp2Bills++;
-            if (p2Str !== '') summary.p2Leads++;
-
-            if (hasRevenue) summary.totalBills++;
+            // ปรับปรุงเงื่อนไข Total Customers (นับเฉพาะคนที่มีรายได้จริงจาก P1 หรือ UP P2)
             if (p1 > 0 || up2 > 0) summary.totalCustomers++;
 
             if (p1 > 0 || up2 > 0) {
@@ -192,6 +193,9 @@ function processSalesData(rows, startDate, endDate) {
         }
     });
 
+    // แก้ไข Total Bills = P1 Bills + P2 Leads
+    summary.totalBills = summary.p1Bills + summary.p2Leads;
+
     return { summary, channels, categories: Object.values(categories).sort((a,b) => b.total - a.total), filteredRows };
 }
 
@@ -231,7 +235,7 @@ function renderFunnel(adsTotals) {
         </div>
         <div class="stat-card" style="border: 1px solid var(--neon-cyan); background: rgba(0, 242, 254, 0.05);">
             <div class="stat-number" style="color: var(--neon-cyan);">${formatCurrency(cpl)}</div>
-            <div class="stat-label">Cost per Booking</div>
+            <div class="stat-label">Cost per Booking (P1+P2)</div>
         </div>
         <div class="stat-card" style="border: 1px solid #ff00f2; background: rgba(255, 0, 242, 0.05);">
             <div class="stat-number" style="color: #ff00f2;">${formatCurrency(costPerHead)}</div>
@@ -308,7 +312,7 @@ function renderSalesStats(data) {
     const messagingToP2Rate = messaging > 0 ? ((s.p2Leads / messaging) * 100).toFixed(2) : "0.00";
 
     document.getElementById('salesOverviewStatsGrid').innerHTML = `
-        <div class="stat-card"><div class="stat-number">${formatNumber(s.totalBills)}</div><div class="stat-label">Total Bills</div></div>
+        <div class="stat-card"><div class="stat-number">${formatNumber(s.totalBills)}</div><div class="stat-label">Total Bills (P1+P2)</div></div>
         <div class="stat-card"><div class="stat-number">${formatCurrency(s.totalRevenue)}</div><div class="stat-label">Total Revenue</div></div>
         <div class="stat-card"><div class="stat-number">${formatNumber(s.totalCustomers)}</div><div class="stat-label">Total Customers</div></div>
         <div class="stat-card" style="border: 1px solid #34d399; background: rgba(52, 211, 153, 0.05);">
