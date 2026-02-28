@@ -56,10 +56,6 @@ const parseGvizDate = (gvizDate) => {
     return isNaN(d) ? null : d;
 };
 const formatDate = (date) => date ? date.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' }) : '-';
-const isNewCustomer = (row) => {
-    const val = String(row[CONFIG.COLUMN_NAMES.IS_NEW] || '').trim().toLowerCase();
-    return val === 'true' || val === '✔' || val === '1';
-};
 const getNestedValue = (obj, path) => {
     return path.split('.').reduce((o, i) => (o ? o[i] : undefined), obj);
 };
@@ -200,7 +196,7 @@ function processSalesData(rows, startDate, endDate) {
 }
 
 // ================================================================
-// 6. RENDERING FUNCTIONS (WITH AVG PER HEAD)
+// 6. RENDERING FUNCTIONS
 // ================================================================
 
 function renderFunnel(adsTotals) {
@@ -213,7 +209,7 @@ function renderFunnel(adsTotals) {
     const roas = spend > 0 ? rev / spend : 0;
     const cpl = totalBills > 0 ? spend / totalBills : 0;
     const costPerHead = totalCustomers > 0 ? spend / totalCustomers : 0;
-    const avgPerHead = totalCustomers > 0 ? rev / totalCustomers : 0; // เพิ่ม Avg Per Head
+    const avgPerHead = totalCustomers > 0 ? rev / totalCustomers : 0; 
     const bookingToClose = totalBills > 0 ? ((totalCustomers / totalBills) * 100).toFixed(2) : "0.00";
     
     document.getElementById('funnelStatsGrid').innerHTML = `
@@ -308,7 +304,6 @@ function renderSalesStats(data) {
     const ads = latestAdsTotals || {};
     const messaging = ads.messaging_conversations || 0;
 
-    // คำนวณ Success Rate เทียบกับจำนวนทัก (Messaging)
     const messagingToP1Rate = messaging > 0 ? ((s.p1Bills / messaging) * 100).toFixed(2) : "0.00";
     const messagingToP2Rate = messaging > 0 ? ((s.p2Leads / messaging) * 100).toFixed(2) : "0.00";
 
@@ -332,9 +327,18 @@ function renderSalesStats(data) {
     document.getElementById('revenueContainer').innerHTML = `
         <div style="margin-bottom: 10px; color: var(--neon-cyan); font-weight: 600;">ยอดขายแยกตามประเภท (THB)</div>
         <div class="stats-grid">
-            <div class="stat-card"><div class="stat-number" style="color:#34d399">${formatCurrency(s.p1Revenue)}</div><div class="stat-label">P1 Revenue</div></div>
-            <div class="stat-card"><div class="stat-number" style="color:#ec4899">${formatCurrency(s.upp1Revenue)}</div><div class="stat-label">UP P1 Revenue</div></div>
-            <div class="stat-card"><div class="stat-number" style="color:#f59e0b">${formatCurrency(s.upp2Revenue)}</div><div class="stat-label">UP P2 Revenue</div></div>
+            <div class="stat-card">
+                <div class="stat-number" style="color:#34d399">${formatCurrency(s.p1Revenue)}</div>
+                <div class="stat-label">P1 Revenue (${formatNumber(s.p1Bills)} บิล)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color:#ec4899">${formatCurrency(s.upp1Revenue)}</div>
+                <div class="stat-label">UP P1 Revenue (${formatNumber(s.upp1Bills)} บิล)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color:#f59e0b">${formatCurrency(s.upp2Revenue)}</div>
+                <div class="stat-label">UP P2 Revenue (${formatNumber(s.upp2Bills)} บิล)</div>
+            </div>
         </div>
         
         <div style="margin-bottom: 10px; margin-top: 20px; color: var(--neon-cyan); font-weight: 600;">วิเคราะห์อัตราส่วนการอัพเกรด (Success Rate)</div>
@@ -383,6 +387,9 @@ function renderDailySpendChart(dailyData) {
     });
 }
 
+// ================================================================
+// 7. MODALS
+// ================================================================
 function showCategoryDetails(categoryName) {
     const C = CONFIG.COLUMN_NAMES;
     const filtered = latestSalesAnalysis.filteredRows.filter(r => {
@@ -422,7 +429,7 @@ function showAdDetails(campaignId) {
 }
 
 // ================================================================
-// 8. GEMINI PROMPT GENERATION (REVISED WITH ANALYST SUMMARY)
+// 8. GEMINI PROMPT GENERATION
 // ================================================================
 
 function generateGeminiPrompt() {
@@ -450,7 +457,6 @@ function generateGeminiPrompt() {
     const cats = latestSalesAnalysis.categories;
     const getTop5 = (sortKey) => [...cats].sort((a,b) => b[sortKey] - a[sortKey]).slice(0, 5);
 
-    // --- [สรุป Ads Analyst Section] ---
     let p = `### [สรุป Ads Analyst]\n`;
     p += `ค่า Ads = ${f(spend)}\n`;
     p += `ข้อความทัก = ${num(messaging)}\n`;
@@ -476,7 +482,6 @@ function generateGeminiPrompt() {
     p += `หมวดหมู่ UP P2 (บิลพร้อมยอดชำระ):\n`;
     p += getTop5('up2B').filter(c => c.up2B > 0).map(c => `- ${c.name}: ${num(c.up2B)} บิล | ยอดสะสม: ${f(c.total)}`).join('\n') + `\n\n`;
 
-    // --- [ข้อมูลเดิมทั้งหมด] ---
     p += `สาขา: ${branchName}\n`;
     p += `ช่วงเวลาปัจจุบัน: ${formatDate(new Date(ui.startDate.value))} ถึง ${formatDate(new Date(ui.endDate.value))}\n\n`;
 
