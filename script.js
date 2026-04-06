@@ -1215,7 +1215,7 @@ async function exportToGoogleSheet() {
         upP1Revenue: s.upp1Revenue || 0,
         parP2: 150, // ค่าคงที่ตามรูป
         p2Named: s.p2Leads || 0, // P2 ที่ได้ชื่อ (Leads)
-        p2Entered: 0, // P2 ที่เข้ามา (ต้องระบุแหล่งข้อมูลเพิ่มถ้ามี)
+        p2Entered: s.upp2Bills || 0, // P2 ที่เข้ามา (จำนวนบิล UP P2)
         upP2Revenue: s.upp2Revenue || 0,
         shortfallBill: 0, // ยอดขาด/บิล (คำนวณตามสูตรถ้ามี)
         shortfallP2: 0, // ยอดขาด/P2
