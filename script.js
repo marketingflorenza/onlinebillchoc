@@ -5,7 +5,7 @@ const CONFIG = {
     API_BASE_URL: 'https://backend-api-choc88.vercel.app/api',
     SHEET_ID: '1F2bTvP1ySUT1q6fzRPQu7UpKNW_ze8GtKkd2rmRUjkI',
     SHEET_NAME_SUMMARY: 'SUM',
-    GOOGLE_SHEET_WEBHOOK_URL: 'YOUR_APPS_SCRIPT_URL', // ใส่ URL ของ Apps Script ที่นี่
+    GOOGLE_SHEET_WEBHOOK_URL: 'https://script.google.com/macros/s/AKfycbw3sB51doTE-BbjlkJaHlWGIg_Bm8VrHvLOfFU3xSAN4a29qRajyN2GlqcHcUXBAyWMag/exec',
     COLUMN_NAMES: {
         CUSTOMER: 'ชื่อลูกค้า', DATE: 'วันที่', PHONE: 'เบอร์ติดต่อ',
         CATEGORIES: 'หมวดหมู่', CHANNEL: 'ช่องทาง', INTEREST: 'รายการที่สนใจ',
