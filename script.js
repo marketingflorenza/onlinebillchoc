@@ -1205,20 +1205,24 @@ async function exportToGoogleSheet() {
     const ads = latestAdsTotals || {};
     const branchName = document.querySelector('h1').innerText.split(':')[0].replace('🚀 ', '').trim();
 
+    // คำนวณ PAR จากข้อมูลจริง
+    const parBillP1 = s.p1Bills > 0 ? Math.round(s.p1Revenue / s.p1Bills) : 0;
+    const parBillP2 = s.p2Leads > 0 ? Math.round(s.upp2Revenue / s.p2Leads) : 0;
+
     // ข้อมูลตามหัวข้อในรูปภาพ
     const data = {
         branch: branchName,
         facebookAds: ads.spend || 0,
-        parBillP1: 200, // ค่าคงที่ตามรูป หรือสามารถปรับเปลี่ยนได้
+        parBillP1: parBillP1,
         p1Revenue: s.p1Revenue || 0,
         p1Bills: s.p1Bills || 0,
         upP1Revenue: s.upp1Revenue || 0,
-        parP2: 150, // ค่าคงที่ตามรูป
+        parP2: parBillP2,
         p2Named: s.p2Leads || 0, // P2 ที่ได้ชื่อ (Leads)
         p2Entered: s.upp2Bills || 0, // P2 ที่เข้ามา (จำนวนบิล UP P2)
         upP2Revenue: s.upp2Revenue || 0,
-        shortfallBill: 0, // ยอดขาด/บิล (คำนวณตามสูตรถ้ามี)
-        shortfallP2: 0, // ยอดขาด/P2
+        shortfallBill: Math.max(0, (s.p1Revenue || 0) - parBillP1), // ยอดขาด/บิล = P1 ยอด - PAR บิล P1
+        shortfallP2: Math.max(0, (s.upp2Revenue || 0) - parBillP2), // ยอดขาด/P2 = UP P2 ยอด - PAR บิล P2
         totalRevenue: s.totalRevenue || 0
     };
 
