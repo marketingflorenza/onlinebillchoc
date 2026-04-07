@@ -1206,23 +1206,23 @@ async function exportToGoogleSheet() {
     const branchName = document.querySelector('h1').innerText.split(':')[0].replace('🚀 ', '').trim();
 
     // คำนวณ PAR จากข้อมูลจริง
-    const parBillP1 = s.p1Bills > 0 ? Math.round(s.p1Revenue / s.p1Bills) : 0;
-    const parBillP2 = s.p2Leads > 0 ? Math.round(s.upp2Revenue / s.p2Leads) : 0;
+    const PAR_P1 = 200; // เป้าหมายบิล P1
+    const PAR_P2 = 150; // เป้าหมาย P2 Leads
 
     // ข้อมูลตามหัวข้อในรูปภาพ
     const data = {
         branch: branchName,
         facebookAds: ads.spend || 0,
-        parBillP1: parBillP1,
+        parBillP1: PAR_P1,
         p1Revenue: s.p1Revenue || 0,
         p1Bills: s.p1Bills || 0,
         upP1Revenue: s.upp1Revenue || 0,
-        parP2: parBillP2,
+        parP2: PAR_P2,
         p2Named: s.p2Leads || 0, // P2 ที่ได้ชื่อ (Leads)
         p2Entered: s.upp2Bills || 0, // P2 ที่เข้ามา (จำนวนบิล UP P2)
         upP2Revenue: s.upp2Revenue || 0,
-        shortfallBill: Math.max(0, (s.p1Revenue || 0) - parBillP1), // ยอดขาด/บิล = P1 ยอด - PAR บิล P1
-        shortfallP2: Math.max(0, (s.upp2Revenue || 0) - parBillP2), // ยอดขาด/P2 = UP P2 ยอด - PAR บิล P2
+        shortfallBill: Math.max(0, PAR_P1 - (s.p1Bills || 0)), // ยอดขาด/บิล = 200 - จำนวนบิล P1
+        shortfallP2: Math.max(0, PAR_P2 - (s.p2Leads || 0)), // ยอดขาด/P2 = 150 - P2 ที่ได้ชื่อ
         totalRevenue: s.totalRevenue || 0
     };
 
